@@ -9,6 +9,7 @@ setup(
         "pyyaml>=6.0.1",
         "python-dotenv>=1.0.0",
         "apscheduler>=3.10.0,<4.0.0",
+        "platformdirs>=4.0.0",
     ],
     entry_points={
         "console_scripts": [
