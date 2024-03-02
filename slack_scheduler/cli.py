@@ -1,9 +1,11 @@
 import argparse
 import logging
 import random
+import shutil
 import sys
 from pathlib import Path
 
+from slack_scheduler import paths
 from slack_scheduler.auth import TokenExpiredError, TokenInvalidError
 from slack_scheduler.logger import setup_logging
 from slack_scheduler.sender import SlackAPIError
@@ -12,6 +14,9 @@ log = logging.getLogger(__name__)
 
 
 def main():
+    default_config = paths.config_dir() / "config.yaml"
+    default_env = paths.data_dir() / "credentials.env"
+
     parser = argparse.ArgumentParser(
         prog="slack-scheduler",
         description="Schedule and send Slack messages using browser session tokens.",
@@ -19,12 +24,12 @@ def main():
 
     # Global flags
     parser.add_argument(
-        "--config", type=Path, default=Path("config.yaml"),
-        help="Path to config.yaml (default: ./config.yaml)",
+        "--config", type=Path, default=default_config,
+        help=f"Path to config.yaml (default: {default_config})",
     )
     parser.add_argument(
-        "--env", type=Path, default=Path(".env"),
-        help="Path to .env file with credentials (default: ./.env)",
+        "--env", type=Path, default=default_env,
+        help=f"Path to credentials file (default: {default_env})",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -36,6 +41,11 @@ def main():
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # init
+    subparsers.add_parser(
+        "init", help="Create config directories and example config file",
+    )
 
     # send
     send_parser = subparsers.add_parser(
@@ -52,6 +62,14 @@ def main():
     send_parser.add_argument(
         "--workspace", type=str,
         help="Workspace URL (overrides config)",
+    )
+    send_parser.add_argument(
+        "--jitter", type=int, default=0,
+        help="Random delay in minutes before sending (e.g. --jitter 15 waits 0-15 min)",
+    )
+    send_parser.add_argument(
+        "--selection-mode", type=str, choices=["random", "cycle"],
+        help="Message selection mode (overrides config)",
     )
 
     # run
@@ -82,7 +100,9 @@ def main():
     setup_logging(verbose=args.verbose)
 
     try:
-        if args.command == "send":
+        if args.command == "init":
+            cmd_init(args)
+        elif args.command == "send":
             cmd_send(args)
         elif args.command == "run":
             cmd_run(args)
@@ -113,12 +133,50 @@ def main():
         sys.exit(1)
 
 
+def cmd_init(args):
+    config_dir = paths.config_dir()
+    data_dir = paths.data_dir()
+    log_dir = paths.log_dir()
+
+    for d in [config_dir, data_dir, log_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    config_dest = config_dir / "config.yaml"
+    if not config_dest.exists():
+        example = Path(__file__).parent.parent / "config.example.yaml"
+        if example.exists():
+            shutil.copy(example, config_dest)
+            print(f"Example config copied to: {config_dest}")
+        else:
+            print(f"Config directory created: {config_dir}")
+            print("Create your config.yaml there to get started.")
+    else:
+        print(f"Config already exists: {config_dest}")
+
+    env_dest = data_dir / "credentials.env"
+    if not env_dest.exists():
+        env_dest.write_text(
+            "SLACK_XOXC_TOKEN=xoxc-your-token-here\n"
+            "SLACK_D_COOKIE=xoxd-your-cookie-here\n"
+        )
+        print(f"Credentials template created: {env_dest}")
+    else:
+        print(f"Credentials file already exists: {env_dest}")
+
+    print(f"\nPaths:")
+    print(f"  Config:      {config_dir}")
+    print(f"  Credentials: {env_dest}")
+    print(f"  Logs:        {log_dir}")
+
+
 def cmd_send(args):
+    import time
+    from datetime import datetime
+
     from slack_scheduler.auth import validate_credentials
     from slack_scheduler.config import load_config, load_credentials
     from slack_scheduler.sender import send_message
     from slack_scheduler.templates import render
-    from datetime import datetime
 
     credentials = load_credentials(args.env)
 
@@ -133,17 +191,23 @@ def cmd_send(args):
 
     validate_credentials(credentials, workspace_url)
 
+    # Resolve selection mode: CLI flag > config > default
+    selection_mode = args.selection_mode or "random"
+
     # Resolve message: CLI flag > config channel messages > error
     if args.message:
-        message = random.choice(args.message)
+        if selection_mode == "cycle":
+            from slack_scheduler.selector import pick_message
+            message = pick_message(args.channel, args.message, "cycle")
+        else:
+            message = random.choice(args.message)
     elif args.config.exists():
         config = load_config(args.config)
         channel_cfg = next((c for c in config.channels if c.id == args.channel), None)
         if channel_cfg and channel_cfg.messages:
             from slack_scheduler.selector import pick_message
-            message = pick_message(
-                args.channel, channel_cfg.messages, channel_cfg.selection_mode,
-            )
+            mode = args.selection_mode or channel_cfg.selection_mode
+            message = pick_message(args.channel, channel_cfg.messages, mode)
         else:
             log.error("No --message provided and no messages in config for this channel.")
             sys.exit(1)
@@ -152,6 +216,12 @@ def cmd_send(args):
         sys.exit(1)
 
     message = render(message, datetime.now())
+
+    # Apply jitter delay
+    if args.jitter > 0:
+        delay = random.uniform(0, args.jitter * 60)
+        log.info(f"Jitter: waiting {delay:.0f}s before sending")
+        time.sleep(delay)
 
     result = send_message(
         channel_id=args.channel,
