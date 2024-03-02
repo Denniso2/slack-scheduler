@@ -98,7 +98,7 @@ def load_credentials(env_path: Path) -> Credentials:
     if not token or not cookie:
         raise ValueError(
             f"SLACK_XOXC_TOKEN and SLACK_D_COOKIE must be set in {env_path}. "
-            "Run `slack-scheduler login` or add them manually."
+            "Run `slack-scheduler init` to create a template, then add your credentials."
         )
 
     return Credentials(xoxc_token=token, d_cookie=cookie)

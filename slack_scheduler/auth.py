@@ -31,7 +31,7 @@ def validate_credentials(credentials: Credentials, workspace_url: str) -> None:
         error = data.get("error", "unknown")
         if error == "invalid_auth":
             raise TokenExpiredError(
-                "Slack credentials have expired. Update your .env file."
+                "Slack credentials have expired. Update your credentials file."
             )
         raise TokenInvalidError(f"Slack auth.test failed: {error}")
 

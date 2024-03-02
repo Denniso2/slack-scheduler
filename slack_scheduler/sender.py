@@ -54,7 +54,7 @@ def send_message(
 
             if error == "invalid_auth":
                 raise TokenExpiredError(
-                    "Slack token has expired. Re-run `slack-scheduler login` or update .env."
+                    "Slack token has expired. Update your credentials file."
                 )
 
             if error == "ratelimited":

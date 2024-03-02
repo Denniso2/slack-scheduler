@@ -5,9 +5,11 @@ import random
 import tempfile
 from pathlib import Path
 
+from slack_scheduler import paths
+
 log = logging.getLogger(__name__)
 
-STATE_DIR = Path.home() / ".slack-scheduler" / "state"
+STATE_DIR = paths.state_dir()
 
 
 def pick_message(

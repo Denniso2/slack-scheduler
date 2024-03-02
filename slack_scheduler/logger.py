@@ -1,9 +1,11 @@
 import logging
 from pathlib import Path
 
+from slack_scheduler import paths
+
 
 def setup_logging(verbose: bool = False, log_dir: Path | None = None) -> None:
-    log_dir = log_dir or Path.home() / ".slack-scheduler"
+    log_dir = log_dir or paths.log_dir()
     log_dir.mkdir(parents=True, exist_ok=True)
 
     log_file = log_dir / "slack_scheduler.log"
