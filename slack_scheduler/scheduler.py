@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -35,7 +35,7 @@ def run_daemon(
             )
             log.info(
                 f"Scheduled: {channel.name} ({schedule.cron})"
-                f"{f', jitter ±{schedule.jitter_minutes}min' if schedule.jitter_minutes else ''}"
+                f"{f', up to {schedule.jitter_minutes}min jitter' if schedule.jitter_minutes else ''}"
             )
 
     job_count = len(scheduler.get_jobs())
@@ -97,7 +97,7 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
             trigger = CronTrigger.from_crontab(schedule.cron)
             label = f"{channel.name} ({schedule.cron})"
             if schedule.jitter_minutes:
-                label += f" ±{schedule.jitter_minutes}min jitter"
+                label += f" up to {schedule.jitter_minutes}min jitter"
 
             print(f"  {label}")
 
@@ -109,7 +109,7 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
                 if next_time is None:
                     break
                 upcoming.append(next_time)
-                cursor = next_time
+                cursor = next_time + timedelta(seconds=1)
 
             for t in upcoming:
                 print(f"    - {t.strftime('%Y-%m-%d %H:%M:%S')}")

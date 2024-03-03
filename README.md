@@ -78,7 +78,7 @@ channels:
 
     schedules:
       - cron: "0 9 * * 1-5"  # 9:00 AM, Monday-Friday
-        jitter_minutes: 15    # Randomize ±15 min (sends between 8:45-9:15)
+        jitter_minutes: 15    # Random delay up to 15 min (sends between 9:00-9:15)
         skip_weekends: true
 
   - id: "C0987654321"
@@ -220,13 +220,13 @@ Standard 5-field cron syntax: `minute hour day month weekday`
 
 ### Jitter
 
-Adds a random offset to the scheduled time so messages don't arrive at exactly the same second every day.
+Adds a random delay of 0 to N minutes to the scheduled time so messages don't arrive at exactly the same second every day.
 
 ```yaml
-jitter_minutes: 15  # Sends anywhere in a ±15 minute window
+jitter_minutes: 15  # Sends up to 15 minutes after the scheduled time
 ```
 
-A schedule at `09:00` with `jitter_minutes: 15` will fire between `08:45` and `09:15`.
+A schedule at `09:00` with `jitter_minutes: 15` will fire between `09:00` and `09:15`.
 
 ### Skip Rules
 
