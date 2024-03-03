@@ -96,7 +96,7 @@ def send_message(
             )
             time.sleep(backoff)
 
-    return SendResult(ok=False, channel_id=channel_id, message=message, error_code="max_retries")
+    raise AssertionError("Unreachable: all attempts should return or raise")
 
 
 def _post(

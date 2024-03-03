@@ -36,11 +36,16 @@ def _pick_cycle(channel_id: str, messages: list[str], state_dir: Path) -> str:
     state = _load_state(state_file)
 
     # Reshuffle if state is stale, exhausted, or messages changed
-    if (
-        state is None
-        or state["index"] >= len(state["shuffled"])
-        or sorted(state["shuffled"]) != sorted(messages)
-    ):
+    try:
+        stale = (
+            state is None
+            or state["index"] >= len(state["shuffled"])
+            or sorted(state["shuffled"]) != sorted(messages)
+        )
+    except (TypeError, KeyError, AttributeError):
+        stale = True
+
+    if stale:
         shuffled = messages.copy()
         random.shuffle(shuffled)
         state = {"shuffled": shuffled, "index": 0}

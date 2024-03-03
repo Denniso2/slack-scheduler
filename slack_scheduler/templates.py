@@ -15,4 +15,7 @@ def render(template: str, now: datetime | None = None) -> str:
         day_of_week=now.strftime("%A"),
         time=now.strftime("%H:%M"),
     )
-    return template.format_map(variables)
+    try:
+        return template.format_map(variables)
+    except ValueError:
+        return template
