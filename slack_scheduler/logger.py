@@ -25,6 +25,7 @@ def setup_logging(verbose: bool = False, log_dir: Path | None = None) -> None:
     console_handler.setFormatter(formatter)
 
     root = logging.getLogger("slack_scheduler")
+    root.handlers.clear()
     root.setLevel(logging.DEBUG)
     root.addHandler(file_handler)
     root.addHandler(console_handler)
