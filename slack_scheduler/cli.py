@@ -180,10 +180,12 @@ def cmd_send(args):
 
     credentials = load_credentials(args.env)
 
+    # Load config once if the file exists
+    config = load_config(args.config) if args.config.exists() else None
+
     # Resolve workspace URL: CLI flag > config > error
     workspace_url = args.workspace
-    if not workspace_url and args.config.exists():
-        config = load_config(args.config)
+    if not workspace_url and config:
         workspace_url = config.workspace_url
     if not workspace_url:
         log.error("Workspace URL required. Use --workspace or set it in config.yaml.")
@@ -191,8 +193,8 @@ def cmd_send(args):
 
     validate_credentials(credentials, workspace_url)
 
-    # Resolve selection mode: CLI flag > config > default
-    selection_mode = args.selection_mode or "random"
+    # Resolve selection mode: CLI flag > config default > "random"
+    selection_mode = args.selection_mode or (config.default_selection_mode if config else "random")
 
     # Resolve message: CLI flag > config channel messages > error
     if args.message:
@@ -201,8 +203,7 @@ def cmd_send(args):
             message = pick_message(args.channel, args.message, "cycle")
         else:
             message = random.choice(args.message)
-    elif args.config.exists():
-        config = load_config(args.config)
+    elif config:
         channel_cfg = next((c for c in config.channels if c.id == args.channel), None)
         if channel_cfg and channel_cfg.messages:
             from slack_scheduler.selector import pick_message

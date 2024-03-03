@@ -91,6 +91,12 @@ def load_config(config_path: Path) -> AppConfig:
 
 
 def load_credentials(env_path: Path) -> Credentials:
+    if not env_path.exists():
+        raise FileNotFoundError(
+            f"Credentials file not found: {env_path}\n"
+            "Run `slack-scheduler init` to create a template."
+        )
+
     values = dotenv_values(env_path)
     token = values.get("SLACK_XOXC_TOKEN", "")
     cookie = values.get("SLACK_D_COOKIE", "")
