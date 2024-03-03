@@ -1,8 +1,8 @@
 import argparse
 import logging
 import random
-import shutil
 import sys
+from importlib import resources
 from pathlib import Path
 
 from slack_scheduler import paths
@@ -127,6 +127,7 @@ def main():
         sys.exit(1)
     except ValueError as e:
         log.error(str(e))
+        log.debug("ValueError details:", exc_info=True)
         sys.exit(1)
     except Exception as e:
         log.exception(f"Unexpected error: {e}")
@@ -143,11 +144,12 @@ def cmd_init(args):
 
     config_dest = config_dir / "config.yaml"
     if not config_dest.exists():
-        example = Path(__file__).parent.parent / "config.example.yaml"
-        if example.exists():
-            shutil.copy(example, config_dest)
+        try:
+            ref = resources.files("slack_scheduler").joinpath("config.example.yaml")
+            example_content = ref.read_text()
+            config_dest.write_text(example_content)
             print(f"Example config copied to: {config_dest}")
-        else:
+        except (FileNotFoundError, AttributeError):
             print(f"Config directory created: {config_dir}")
             print("Create your config.yaml there to get started.")
     else:
@@ -159,6 +161,7 @@ def cmd_init(args):
             "SLACK_XOXC_TOKEN=xoxc-your-token-here\n"
             "SLACK_D_COOKIE=xoxd-your-cookie-here\n"
         )
+        env_dest.chmod(0o600)
         print(f"Credentials template created: {env_dest}")
     else:
         print(f"Credentials file already exists: {env_dest}")

@@ -16,3 +16,6 @@ dependencies = [
 
 [project.scripts]
 slack-scheduler = "slack_scheduler.cli:main"
+
+[tool.setuptools.package-data]
+slack_scheduler = ["config.example.yaml"]
