@@ -40,6 +40,31 @@ class Credentials:
     d_cookie: str
 
 
+def _validate_skip_dates(dates: list[str], context: str) -> list[str]:
+    """Validate skip_dates entries are valid ISO format dates.
+
+    Args:
+        dates: List of date strings to validate.
+        context: Description of where these dates come from (e.g., "global skip_dates")
+                for error messages.
+
+    Returns:
+        The validated list of dates.
+
+    Raises:
+        ValueError: If any date is not in YYYY-MM-DD format.
+    """
+    for d in dates:
+        try:
+            date.fromisoformat(d)
+        except ValueError:
+            raise ValueError(
+                f"Invalid skip_dates format in {context}: {d!r} "
+                "(expected YYYY-MM-DD)"
+            )
+    return dates
+
+
 def load_config(config_path: Path) -> AppConfig:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
@@ -52,21 +77,24 @@ def load_config(config_path: Path) -> AppConfig:
         raise ValueError("workspace_url is required in config")
 
     default_mode = raw.get("default_selection_mode", "random")
-    global_skip = raw.get("skip_dates", [])
+    global_skip = _validate_skip_dates(raw.get("skip_dates", []), "global skip_dates")
 
     channels = []
     for ch in raw.get("channels", []):
+        channel_id = ch["id"]
+        channel_name = ch.get("name", channel_id)
         schedules = []
-        for s in ch.get("schedules", []):
+        for idx, s in enumerate(ch.get("schedules", [])):
+            schedule_skip_dates = s.get("skip_dates", [])
+            context = f"channel '{channel_name}' schedule {idx} skip_dates"
+            validated_skip_dates = _validate_skip_dates(schedule_skip_dates, context)
             schedules.append(ScheduleConfig(
                 cron=s["cron"],
                 jitter_minutes=s.get("jitter_minutes", 0),
                 skip_weekends=s.get("skip_weekends", False),
-                skip_dates=s.get("skip_dates", []),
+                skip_dates=validated_skip_dates,
             ))
 
-        channel_id = ch["id"]
-        channel_name = ch.get("name", channel_id)
         messages = ch.get("messages", [])
 
         if not schedules:
@@ -113,11 +141,9 @@ def load_credentials(env_path: Path) -> Credentials:
 def resolve_skip_dates(
     global_dates: list[str], schedule_dates: list[str]
 ) -> set[date]:
+    """Combine global and schedule-specific skip dates into a set of date objects.
+
+    All dates are guaranteed to be valid ISO format strings (validated at config load time).
+    """
     combined = set(global_dates) | set(schedule_dates)
-    result = set()
-    for d in combined:
-        try:
-            result.add(date.fromisoformat(d))
-        except ValueError:
-            log.warning(f"Invalid skip_date format (expected YYYY-MM-DD): {d!r}")
-    return result
+    return {date.fromisoformat(d) for d in combined}
