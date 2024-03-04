@@ -45,7 +45,11 @@ def send_message(
         attempt += 1
         try:
             response = _post(channel_id, message, credentials, workspace_url)
-            data = response.json()
+            try:
+                data = response.json()
+            except (ValueError, requests.JSONDecodeError):
+                response.raise_for_status()
+                raise
 
             if data.get("ok"):
                 return SendResult(
@@ -115,5 +119,4 @@ def _post(
         json={"channel": channel_id, "text": message},
         timeout=30,
     )
-    response.raise_for_status()
     return response

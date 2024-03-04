@@ -1,4 +1,7 @@
+import logging
 from datetime import datetime
+
+log = logging.getLogger(__name__)
 
 
 class _SafeDict(dict):
@@ -18,4 +21,5 @@ def render(template: str, now: datetime | None = None) -> str:
     try:
         return template.format_map(variables)
     except ValueError:
+        log.warning(f"Failed to render template (bad format syntax), sending as-is: {template!r}")
         return template
