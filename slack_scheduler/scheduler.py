@@ -95,6 +95,7 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
     for channel in config.channels:
         for schedule in channel.schedules:
             trigger = CronTrigger.from_crontab(schedule.cron)
+            skip_dates = resolve_skip_dates(config.skip_dates, schedule.skip_dates)
             label = f"{channel.name} ({schedule.cron})"
             if schedule.jitter_minutes:
                 label += f" up to {schedule.jitter_minutes}min jitter"
@@ -104,12 +105,18 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
             now = datetime.now(tz=trigger.timezone)
             upcoming = []
             cursor = now
-            for _ in range(count):
+            iterations = 0
+            while len(upcoming) < count and iterations < 1000:
+                iterations += 1
                 next_time = trigger.get_next_fire_time(cursor, cursor)
                 if next_time is None:
                     break
-                upcoming.append(next_time)
                 cursor = next_time + timedelta(seconds=1)
+                if schedule.skip_weekends and next_time.date().weekday() >= 5:
+                    continue
+                if next_time.date() in skip_dates:
+                    continue
+                upcoming.append(next_time)
 
             for t in upcoming:
                 print(f"    - {t.strftime('%Y-%m-%d %H:%M:%S')}")
