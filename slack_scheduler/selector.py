@@ -9,8 +9,6 @@ from slack_scheduler import paths
 
 log = logging.getLogger(__name__)
 
-STATE_DIR = paths.state_dir()
-
 
 def pick_message(
     channel_id: str,
@@ -25,7 +23,7 @@ def pick_message(
         return messages[0]
 
     if mode == "cycle":
-        return _pick_cycle(channel_id, messages, state_dir or STATE_DIR)
+        return _pick_cycle(channel_id, messages, state_dir or paths.state_dir())
     return random.choice(messages)
 
 
@@ -35,7 +33,6 @@ def _pick_cycle(channel_id: str, messages: list[str], state_dir: Path) -> str:
 
     state = _load_state(state_file)
 
-    # Reshuffle if state is stale, exhausted, or messages changed
     try:
         stale = (
             state is None

@@ -1,5 +1,6 @@
 import argparse
 import logging
+import platform
 import random
 import sys
 from importlib import resources
@@ -161,7 +162,8 @@ def cmd_init(args):
             "SLACK_XOXC_TOKEN=xoxc-your-token-here\n"
             "SLACK_D_COOKIE=xoxd-your-cookie-here\n"
         )
-        env_dest.chmod(0o600)
+        if platform.system() != "Windows":
+            env_dest.chmod(0o600)
         print(f"Credentials template created: {env_dest}")
     else:
         print(f"Credentials file already exists: {env_dest}")
@@ -183,10 +185,8 @@ def cmd_send(args):
 
     credentials = load_credentials(args.env)
 
-    # Load config once if the file exists
     config = load_config(args.config) if args.config.exists() else None
 
-    # Resolve workspace URL: CLI flag > config > error
     workspace_url = args.workspace
     if not workspace_url and config:
         workspace_url = config.workspace_url
@@ -196,11 +196,8 @@ def cmd_send(args):
 
     validate_credentials(credentials, workspace_url)
 
-    # Resolve selection mode: CLI flag > config default > "random"
-    selection_mode = args.selection_mode or (config.default_selection_mode if config else "random")
-
-    # Resolve message: CLI flag > config channel messages > error
     if args.message:
+        selection_mode = args.selection_mode or (config.default_selection_mode if config else "random")
         if selection_mode == "cycle":
             from slack_scheduler.selector import pick_message
             message = pick_message(args.channel, args.message, "cycle")
@@ -221,7 +218,6 @@ def cmd_send(args):
 
     message = render(message, datetime.now())
 
-    # Apply jitter delay
     if args.jitter > 0:
         delay = random.uniform(0, args.jitter * 60)
         log.info(f"Jitter: waiting {delay:.0f}s before sending")
