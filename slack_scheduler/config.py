@@ -8,6 +8,8 @@ from dotenv import dotenv_values
 
 log = logging.getLogger(__name__)
 
+VALID_SELECTION_MODES = {"random", "cycle"}
+
 
 @dataclass
 class ScheduleConfig:
@@ -77,16 +79,29 @@ def load_config(config_path: Path) -> AppConfig:
         raise ValueError("workspace_url is required in config")
 
     default_mode = raw.get("default_selection_mode", "random")
+    if default_mode not in VALID_SELECTION_MODES:
+        raise ValueError(
+            f"Invalid default_selection_mode: {default_mode!r} "
+            f"(expected one of {sorted(VALID_SELECTION_MODES)})"
+        )
     global_skip = _validate_skip_dates(raw.get("skip_dates", []), "global skip_dates")
 
     channels = []
-    for ch in raw.get("channels", []):
+    for idx, ch in enumerate(raw.get("channels", [])):
+        if "id" not in ch:
+            raise ValueError(
+                f"Channel at index {idx} is missing required field 'id'"
+            )
         channel_id = ch["id"]
         channel_name = ch.get("name", channel_id)
         schedules = []
-        for idx, s in enumerate(ch.get("schedules", [])):
+        for s_idx, s in enumerate(ch.get("schedules", [])):
+            if "cron" not in s:
+                raise ValueError(
+                    f"Channel '{channel_name}' schedule at index {s_idx} is missing required field 'cron'"
+                )
             schedule_skip_dates = s.get("skip_dates", [])
-            context = f"channel '{channel_name}' schedule {idx} skip_dates"
+            context = f"channel '{channel_name}' schedule {s_idx} skip_dates"
             validated_skip_dates = _validate_skip_dates(schedule_skip_dates, context)
             schedules.append(ScheduleConfig(
                 cron=s["cron"],
@@ -102,12 +117,19 @@ def load_config(config_path: Path) -> AppConfig:
         if not messages:
             log.warning(f"Channel {channel_name} ({channel_id}) has no messages defined.")
 
+        selection_mode = ch.get("selection_mode", default_mode)
+        if selection_mode not in VALID_SELECTION_MODES:
+            raise ValueError(
+                f"Channel '{channel_name}' has invalid selection_mode: {selection_mode!r} "
+                f"(expected one of {sorted(VALID_SELECTION_MODES)})"
+            )
+
         channels.append(ChannelConfig(
             id=channel_id,
             name=channel_name,
             messages=messages,
             schedules=schedules,
-            selection_mode=ch.get("selection_mode", default_mode),
+            selection_mode=selection_mode,
         ))
 
     return AppConfig(
