@@ -7,14 +7,13 @@ name = "slack-scheduler"
 version = "0.1.0"
 description = "Automated Slack message scheduler with cron-based scheduling, message rotation, and jitter support"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [{name = "Denniso2", email = "dennis12552@gmail.com"}]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 requires-python = ">=3.10"
