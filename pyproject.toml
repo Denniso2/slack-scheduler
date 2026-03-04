@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slack-scheduler"
-version = "0.1.0"
+version = "0.1.1"
 description = "Automated Slack message scheduler with cron-based scheduling, message rotation, and jitter support"
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,9 @@ dependencies = [
     "apscheduler>=3.10.0,<4.0.0",
     "platformdirs>=4.0.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/Denniso2/slack-scheduler"
 
 [project.scripts]
 slack-scheduler = "slack_scheduler.cli:main"

@@ -43,7 +43,8 @@ def run_daemon(
         log.warning("No schedules configured. Nothing to do.")
         return
 
-    log.info(f"Starting scheduler with {job_count} job(s). Press Ctrl-C to stop.")
+    mode = "[DRY RUN] " if dry_run else ""
+    log.info(f"{mode}Starting scheduler with {job_count} job(s). Press Ctrl-C to stop.")
     scheduler.start()
 
 
