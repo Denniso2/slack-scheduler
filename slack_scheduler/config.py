@@ -16,9 +16,6 @@ SLACK_API_BASE = "https://slack.com/api"
 class ScheduleConfig:
     cron: str
     jitter_minutes: int = 0
-    skip_weekends: bool = False
-    skip_dates: list[str] = field(default_factory=list)
-    skip_holidays: str | None = None
 
 
 @dataclass
@@ -28,6 +25,9 @@ class ChannelConfig:
     messages: list[str]
     schedules: list[ScheduleConfig]
     selection_mode: str = "random"
+    skip_weekends: bool = False
+    skip_dates: list[str] = field(default_factory=list)
+    skip_holidays: str | None = None
 
 
 @dataclass
@@ -133,25 +133,26 @@ def load_config(config_path: Path) -> AppConfig:
             )
         channel_id = ch["id"]
         channel_name = ch.get("name", channel_id)
+
+        channel_skip_weekends = ch.get("skip_weekends", False)
+        channel_skip_dates = _validate_skip_dates(
+            ch.get("skip_dates", []),
+            f"channel '{channel_name}' skip_dates",
+        )
+        channel_skip_holidays = _validate_skip_holidays(
+            ch.get("skip_holidays"),
+            f"channel '{channel_name}' skip_holidays",
+        )
+
         schedules = []
         for s_idx, s in enumerate(ch.get("schedules", [])):
             if "cron" not in s:
                 raise ValueError(
                     f"Channel '{channel_name}' schedule at index {s_idx} is missing required field 'cron'"
                 )
-            schedule_skip_dates = s.get("skip_dates", [])
-            context = f"channel '{channel_name}' schedule {s_idx} skip_dates"
-            validated_skip_dates = _validate_skip_dates(schedule_skip_dates, context)
-            schedule_skip_holidays = _validate_skip_holidays(
-                s.get("skip_holidays"),
-                f"channel '{channel_name}' schedule {s_idx} skip_holidays",
-            )
             schedules.append(ScheduleConfig(
                 cron=s["cron"],
                 jitter_minutes=s.get("jitter_minutes", 0),
-                skip_weekends=s.get("skip_weekends", False),
-                skip_dates=validated_skip_dates,
-                skip_holidays=schedule_skip_holidays,
             ))
 
         messages = ch.get("messages", [])
@@ -174,6 +175,9 @@ def load_config(config_path: Path) -> AppConfig:
             messages=messages,
             schedules=schedules,
             selection_mode=selection_mode,
+            skip_weekends=channel_skip_weekends,
+            skip_dates=channel_skip_dates,
+            skip_holidays=channel_skip_holidays,
         ))
 
     seen_names: set[str] = set()
@@ -215,19 +219,19 @@ def load_credentials(env_path: Path) -> Credentials:
 
 def resolve_skip_dates(
     global_dates: list[str],
-    schedule_dates: list[str],
+    channel_dates: list[str],
     global_holidays: str | None = None,
-    schedule_holidays: str | None = None,
+    channel_holidays: str | None = None,
 ) -> set[date]:
-    """Combine global and schedule-specific skip dates into a set of date objects.
+    """Combine global and channel-specific skip dates into a set of date objects.
 
     All dates are guaranteed to be valid ISO format strings (validated at config load time).
     If skip_holidays is specified, the corresponding country holidays are merged in.
     """
-    combined = set(global_dates) | set(schedule_dates)
+    combined = set(global_dates) | set(channel_dates)
     result = {date.fromisoformat(d) for d in combined}
 
-    for holidays_code in (global_holidays, schedule_holidays):
+    for holidays_code in (global_holidays, channel_holidays):
         if holidays_code is not None:
             result |= _get_holiday_dates(holidays_code)
 

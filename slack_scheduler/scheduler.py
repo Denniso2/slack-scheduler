@@ -20,19 +20,19 @@ def run_daemon(
     scheduler = BlockingScheduler()
 
     for channel in config.channels:
-        for i, schedule in enumerate(channel.schedules):
-            skip_dates = resolve_skip_dates(
-                config.skip_dates, schedule.skip_dates,
-                global_holidays=config.skip_holidays,
-                schedule_holidays=schedule.skip_holidays,
-            )
+        skip_dates = resolve_skip_dates(
+            config.skip_dates, channel.skip_dates,
+            global_holidays=config.skip_holidays,
+            channel_holidays=channel.skip_holidays,
+        )
 
+        for i, schedule in enumerate(channel.schedules):
             scheduler.add_job(
                 _fire,
                 trigger=CronTrigger.from_crontab(schedule.cron),
                 jitter=schedule.jitter_minutes * 60 if schedule.jitter_minutes else None,
                 args=[channel.id, channel.name, channel.messages, channel.selection_mode,
-                      schedule.skip_weekends, skip_dates, credentials, dry_run],
+                      channel.skip_weekends, skip_dates, credentials, dry_run],
                 id=f"{channel.name}_{i}",
                 name=f"{channel.name} ({schedule.cron})",
             )
@@ -95,13 +95,14 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
     print(f"\nUpcoming scheduled messages (next {count} per schedule):\n")
 
     for channel in config.channels:
+        skip_dates = resolve_skip_dates(
+            config.skip_dates, channel.skip_dates,
+            global_holidays=config.skip_holidays,
+            channel_holidays=channel.skip_holidays,
+        )
+
         for schedule in channel.schedules:
             trigger = CronTrigger.from_crontab(schedule.cron)
-            skip_dates = resolve_skip_dates(
-                config.skip_dates, schedule.skip_dates,
-                global_holidays=config.skip_holidays,
-                schedule_holidays=schedule.skip_holidays,
-            )
             label = f"{channel.name} ({schedule.cron})"
             if schedule.jitter_minutes:
                 label += f" up to {schedule.jitter_minutes}min jitter"
@@ -118,7 +119,7 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
                 if next_time is None:
                     break
                 cursor = next_time + timedelta(seconds=1)
-                if schedule.skip_weekends and next_time.date().weekday() >= 5:
+                if channel.skip_weekends and next_time.date().weekday() >= 5:
                     continue
                 if next_time.date() in skip_dates:
                     continue

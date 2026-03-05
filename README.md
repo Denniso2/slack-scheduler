@@ -70,6 +70,7 @@ skip_dates:
 channels:
   - id: "C1234567890"        # Slack channel ID
     name: "standup"           # Human-readable label (for logs)
+    skip_weekends: true
 
     messages:
       - "Good morning team! Ready for {day_of_week}."
@@ -81,7 +82,6 @@ channels:
     schedules:
       - cron: "0 9 * * 1-5"  # 9:00 AM, Monday-Friday
         jitter_minutes: 15    # Random delay up to 15 min (sends between 9:00-9:15)
-        skip_weekends: true
 
   - id: "C0987654321"
     name: "random-chat"
@@ -145,6 +145,9 @@ slack-scheduler trigger --name standup-morning --message "Custom message"
 # With jitter
 slack-scheduler trigger --name standup-morning --jitter 10
 
+# Respect skip rules (weekends, dates, holidays)
+slack-scheduler trigger --name standup-morning --respect-skips
+
 # Preview without sending
 slack-scheduler --dry-run trigger --name standup-morning
 ```
@@ -155,6 +158,7 @@ slack-scheduler --dry-run trigger --name standup-morning
 | `--message` | Override message (multiple for random/cycle selection) |
 | `--jitter <minutes>` | Random delay of 0 to N minutes before sending |
 | `--selection-mode` | `random` or `cycle` (overrides config) |
+| `--respect-skips` | Check the channel's skip rules before sending |
 
 ### `run` — Start the scheduler daemon
 
@@ -258,20 +262,20 @@ A schedule at `09:00` with `jitter_minutes: 15` will fire between `09:00` and `0
 
 ### Skip Rules
 
+Skip rules are set per config entry and apply to all schedules within that entry.
+
 ```yaml
-# Skip weekends
-skip_weekends: true
-
-# Skip specific dates (per-schedule, merged with global skip_dates)
-skip_dates:
-  - "2026-12-24"
-
-# Skip country-specific bank holidays
-skip_holidays: "NL"         # Netherlands
-# skip_holidays: "US-CA"    # California, US
+channels:
+  - id: "C1234567890"
+    name: "standup"
+    skip_weekends: true
+    skip_dates:
+      - "2026-12-24"
+    skip_holidays: "NL"         # Netherlands
+    # skip_holidays: "US-CA"    # California, US
 ```
 
-`skip_holidays` can be set globally or per-schedule. Both levels are merged (union). Country codes follow [ISO 3166](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2); subdivisions use the `CC-XX` format (e.g. `US-CA`, `DE-BY`). See the [python-holidays](https://github.com/vacanza/python-holidays) docs for the full list of supported countries.
+`skip_holidays` can be set globally or per config entry. Both levels are merged (union). Country codes follow [ISO 3166](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2); subdivisions use the `CC-XX` format (e.g. `US-CA`, `DE-BY`). See the [python-holidays](https://github.com/vacanza/python-holidays) docs for the full list of supported countries.
 
 ## File Locations
 

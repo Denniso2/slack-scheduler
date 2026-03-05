@@ -121,15 +121,18 @@ class TestLoadConfigHappyPath:
         assert isinstance(s, ScheduleConfig)
         assert s.cron == "0 9 * * 1-5"
         assert s.jitter_minutes == 0
-        assert s.skip_weekends is False
 
     def test_global_skip_dates_parsed(self, full_config_file):
         cfg = load_config(full_config_file)
         assert "2026-12-25" in cfg.skip_dates
 
-    def test_schedule_skip_dates_parsed(self, full_config_file):
+    def test_channel_skip_dates_parsed(self, full_config_file):
         cfg = load_config(full_config_file)
-        assert "2026-07-04" in cfg.channels[0].schedules[0].skip_dates
+        assert "2026-07-04" in cfg.channels[0].skip_dates
+
+    def test_channel_skip_weekends_parsed(self, full_config_file):
+        cfg = load_config(full_config_file)
+        assert cfg.channels[0].skip_weekends is True
 
     def test_channel_name_defaults_to_id(self, tmp_path):
         p = tmp_path / "config.yaml"
@@ -202,7 +205,7 @@ class TestLoadConfigValidation:
               - id: "C111"
                 messages: ["hi"]
                 schedules:
-                  - skip_weekends: true
+                  - jitter_minutes: 5
         """)
         with pytest.raises(ValueError, match="missing required field 'cron'"):
             load_config(p)
@@ -228,15 +231,15 @@ class TestLoadConfigValidation:
         with pytest.raises(ValueError, match="global skip_dates"):
             load_config(p)
 
-    def test_invalid_schedule_skip_date_raises(self, tmp_path):
+    def test_invalid_channel_skip_date_raises(self, tmp_path):
         p = self._write(tmp_path, """\
             channels:
               - id: "C111"
                 messages: ["hi"]
+                skip_dates:
+                  - "not-a-date"
                 schedules:
                   - cron: "0 9 * * *"
-                    skip_dates:
-                      - "not-a-date"
         """)
         with pytest.raises(ValueError, match="skip_dates"):
             load_config(p)
@@ -277,9 +280,10 @@ class TestLoadConfigValidation:
 # --- dataclass default isolation --------------------------------------------
 
 class TestDataclassDefaults:
-    def test_schedule_config_skip_dates_not_shared(self):
-        a = ScheduleConfig(cron="0 9 * * *")
-        b = ScheduleConfig(cron="0 9 * * *")
+    def test_channel_config_skip_dates_not_shared(self):
+        from slack_scheduler.config import ChannelConfig
+        a = ChannelConfig(id="C1", name="a", messages=[], schedules=[])
+        b = ChannelConfig(id="C2", name="b", messages=[], schedules=[])
         a.skip_dates.append("2026-01-01")
         assert b.skip_dates == []
 
@@ -348,8 +352,8 @@ class TestResolveSkipDatesWithHolidays:
         current_year = date.today().year
         assert date(current_year, 12, 25) in result
 
-    def test_merges_schedule_holidays(self):
-        result = resolve_skip_dates([], [], schedule_holidays="NL")
+    def test_merges_channel_holidays(self):
+        result = resolve_skip_dates([], [], channel_holidays="NL")
         assert len(result) > 0
 
     def test_merges_both_holidays_and_manual_dates(self):
@@ -377,16 +381,16 @@ class TestLoadConfigSkipHolidays:
         """)
         assert load_config(p).skip_holidays == "US"
 
-    def test_schedule_skip_holidays_parsed(self, tmp_path):
+    def test_channel_skip_holidays_parsed(self, tmp_path):
         p = self._write(tmp_path, """\
             channels:
               - id: "C111"
                 messages: ["hi"]
+                skip_holidays: "NL"
                 schedules:
                   - cron: "0 9 * * *"
-                    skip_holidays: "NL"
         """)
-        assert load_config(p).channels[0].schedules[0].skip_holidays == "NL"
+        assert load_config(p).channels[0].skip_holidays == "NL"
 
     def test_invalid_global_skip_holidays_raises(self, tmp_path):
         p = self._write(tmp_path, """\
@@ -396,14 +400,14 @@ class TestLoadConfigSkipHolidays:
         with pytest.raises(ValueError, match="skip_holidays"):
             load_config(p)
 
-    def test_invalid_schedule_skip_holidays_raises(self, tmp_path):
+    def test_invalid_channel_skip_holidays_raises(self, tmp_path):
         p = self._write(tmp_path, """\
             channels:
               - id: "C111"
                 messages: ["hi"]
+                skip_holidays: "XX"
                 schedules:
                   - cron: "0 9 * * *"
-                    skip_holidays: "XX"
         """)
         with pytest.raises(ValueError, match="skip_holidays"):
             load_config(p)
@@ -411,4 +415,4 @@ class TestLoadConfigSkipHolidays:
     def test_skip_holidays_defaults_to_none(self, minimal_config_file):
         cfg = load_config(minimal_config_file)
         assert cfg.skip_holidays is None
-        assert cfg.channels[0].schedules[0].skip_holidays is None
+        assert cfg.channels[0].skip_holidays is None

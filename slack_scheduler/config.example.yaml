@@ -16,6 +16,9 @@ channels:
   - id: "C1234567890"
     name: "standup"
 
+    skip_weekends: true
+    # skip_holidays: "US-CA"  # Skip California state holidays too
+
     messages:
       - "Good morning team! Ready for {day_of_week}."
       - "Morning all! Let's have a great {day_of_week}."
@@ -26,8 +29,6 @@ channels:
     schedules:
       - cron: "0 9 * * 1-5"
         jitter_minutes: 15
-        skip_weekends: true
-        # skip_holidays: "US-CA"  # Skip California state holidays too
 
   - id: "C0987654321"
     name: "random-chat"

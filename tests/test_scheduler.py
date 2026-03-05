@@ -190,7 +190,8 @@ class TestPrintUpcoming:
     def test_skips_weekends(self, capsys):
         channel = ChannelConfig(
             id="C1", name="ch", messages=["hi"],
-            schedules=[ScheduleConfig(cron="0 9 * * *", skip_weekends=True)],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+            skip_weekends=True,
         )
         config = AppConfig(channels=[channel])
         print_upcoming(config, count=7)
@@ -239,7 +240,8 @@ class TestRunDaemonHolidays:
     def test_passes_holidays_to_resolve(self, credentials_obj):
         channel = ChannelConfig(
             id="C1", name="ch", messages=["hi"],
-            schedules=[ScheduleConfig(cron="0 9 * * *", skip_holidays="NL")],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+            skip_holidays="NL",
         )
         config = AppConfig(channels=[channel], skip_holidays="US")
         with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched, \
@@ -249,5 +251,5 @@ class TestRunDaemonHolidays:
             mock_resolve.return_value = set()
             run_daemon(config, credentials_obj)
         mock_resolve.assert_called_once_with(
-            [], [], global_holidays="US", schedule_holidays="NL",
+            [], [], global_holidays="US", channel_holidays="NL",
         )

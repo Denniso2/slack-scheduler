@@ -70,6 +70,9 @@ FULL_CONFIG_YAML = textwrap.dedent("""\
     channels:
       - id: "C111"
         name: "standup"
+        skip_weekends: true
+        skip_dates:
+          - "2026-07-04"
         messages:
           - "Good morning!"
           - "Rise and shine!"
@@ -77,9 +80,6 @@ FULL_CONFIG_YAML = textwrap.dedent("""\
         schedules:
           - cron: "0 9 * * 1-5"
             jitter_minutes: 10
-            skip_weekends: true
-            skip_dates:
-              - "2026-07-04"
       - id: "C222"
         name: "random-chat"
         messages:
@@ -113,8 +113,6 @@ def schedule_config() -> ScheduleConfig:
     return ScheduleConfig(
         cron="0 9 * * 1-5",
         jitter_minutes=0,
-        skip_weekends=False,
-        skip_dates=[],
     )
 
 

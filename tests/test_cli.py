@@ -5,6 +5,7 @@ source module (e.g., slack_scheduler.config.load_credentials) rather than
 slack_scheduler.cli.load_credentials.
 """
 import sys
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -203,7 +204,7 @@ class TestCmdTrigger:
     def test_sends_config_message(self, capsys):
         config = self._make_config()
         mock_result = SendResult(ok=True, channel_id="C1", message="Good morning!", ts="1")
-        args = make_args(name="standup", message=None, jitter=0, selection_mode=None)
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=False)
         with patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
@@ -217,7 +218,7 @@ class TestCmdTrigger:
 
     def test_unknown_name_exits_1(self):
         config = self._make_config()
-        args = make_args(name="nonexistent", message=None, jitter=0, selection_mode=None)
+        args = make_args(name="nonexistent", message=None, jitter=0, selection_mode=None, respect_skips=False)
         with patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
@@ -228,7 +229,7 @@ class TestCmdTrigger:
     def test_message_override(self, capsys):
         config = self._make_config()
         mock_result = SendResult(ok=True, channel_id="C1", message="override", ts="1")
-        args = make_args(name="standup", message=["override"], jitter=0, selection_mode=None)
+        args = make_args(name="standup", message=["override"], jitter=0, selection_mode=None, respect_skips=False)
         with patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
@@ -240,7 +241,7 @@ class TestCmdTrigger:
     def test_selection_mode_override(self, capsys):
         config = self._make_config(selection_mode="random")
         mock_result = SendResult(ok=True, channel_id="C1", message="a", ts="1")
-        args = make_args(name="standup", message=None, jitter=0, selection_mode="cycle")
+        args = make_args(name="standup", message=None, jitter=0, selection_mode="cycle", respect_skips=False)
         with patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
@@ -253,7 +254,7 @@ class TestCmdTrigger:
     def test_jitter_calls_sleep(self):
         config = self._make_config()
         mock_result = SendResult(ok=True, channel_id="C1", message="hi", ts="1")
-        args = make_args(name="standup", message=None, jitter=5, selection_mode=None)
+        args = make_args(name="standup", message=None, jitter=5, selection_mode=None, respect_skips=False)
         with patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
@@ -267,7 +268,7 @@ class TestCmdTrigger:
     def test_zero_jitter_no_sleep(self):
         config = self._make_config()
         mock_result = SendResult(ok=True, channel_id="C1", message="hi", ts="1")
-        args = make_args(name="standup", message=None, jitter=0, selection_mode=None)
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=False)
         with patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
@@ -282,7 +283,7 @@ class TestCmdTrigger:
         config = self._make_config()
         mock_result = SendResult(ok=False, channel_id="C1", message="hi",
                                  error_code="channel_not_found")
-        args = make_args(name="standup", message=None, jitter=0, selection_mode=None)
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=False)
         with patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
@@ -295,7 +296,7 @@ class TestCmdTrigger:
 
     def test_no_messages_exits_1(self):
         config = self._make_config(messages=[])
-        args = make_args(name="standup", message=None, jitter=0, selection_mode=None)
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=False)
         with patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
@@ -306,7 +307,7 @@ class TestCmdTrigger:
     def test_dry_run_forwarded(self, capsys):
         config = self._make_config()
         mock_result = SendResult(ok=True, channel_id="C1", message="hi", ts="1")
-        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, dry_run=True)
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=False, dry_run=True)
         with patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
@@ -315,6 +316,60 @@ class TestCmdTrigger:
              patch(P_RENDER, side_effect=lambda m, *a: m):
             cmd_trigger(args)
         assert mock_send.call_args.kwargs["dry_run"] is True
+
+    def test_respect_skips_skips_weekend(self):
+        config = self._make_config(skip_weekends=True)
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=True)
+        saturday = date(2026, 3, 7)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch("datetime.date", wraps=date) as mock_date, \
+             patch(P_SEND) as mock_send:
+            mock_date.today.return_value = saturday
+            cmd_trigger(args)
+        mock_send.assert_not_called()
+
+    def test_respect_skips_skips_date(self):
+        config = self._make_config(skip_dates=["2026-03-05"])
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=True)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch("datetime.date", wraps=date) as mock_date, \
+             patch(P_SEND) as mock_send:
+            mock_date.today.return_value = date(2026, 3, 5)
+            cmd_trigger(args)
+        mock_send.assert_not_called()
+
+    def test_respect_skips_sends_on_normal_day(self, capsys):
+        config = self._make_config(skip_weekends=True)
+        mock_result = SendResult(ok=True, channel_id="C1", message="hi", ts="1")
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=True)
+        monday = date(2026, 3, 2)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch("datetime.date", wraps=date) as mock_date, \
+             patch(P_PICK, return_value="hi"), \
+             patch(P_SEND, return_value=mock_result) as mock_send, \
+             patch(P_RENDER, side_effect=lambda m, *a: m):
+            mock_date.today.return_value = monday
+            cmd_trigger(args)
+        mock_send.assert_called_once()
+
+    def test_no_respect_skips_ignores_weekend(self, capsys):
+        config = self._make_config(skip_weekends=True)
+        mock_result = SendResult(ok=True, channel_id="C1", message="hi", ts="1")
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=False)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch(P_PICK, return_value="hi"), \
+             patch(P_SEND, return_value=mock_result) as mock_send, \
+             patch(P_RENDER, side_effect=lambda m, *a: m):
+            cmd_trigger(args)
+        mock_send.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

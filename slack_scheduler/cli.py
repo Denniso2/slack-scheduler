@@ -89,6 +89,10 @@ def main():
         "--selection-mode", type=str, choices=["random", "cycle"],
         help="Message selection mode (overrides config)",
     )
+    trigger_parser.add_argument(
+        "--respect-skips", action="store_true",
+        help="Check the channel's skip rules before sending",
+    )
 
     # run
     run_parser = subparsers.add_parser(
@@ -246,10 +250,10 @@ def cmd_send(args):
 
 def cmd_trigger(args):
     import time
-    from datetime import datetime
+    from datetime import date, datetime
 
     from slack_scheduler.auth import validate_credentials
-    from slack_scheduler.config import load_config, load_credentials
+    from slack_scheduler.config import load_config, load_credentials, resolve_skip_dates
     from slack_scheduler.selector import pick_message
     from slack_scheduler.sender import send_message
     from slack_scheduler.templates import render
@@ -268,6 +272,20 @@ def cmd_trigger(args):
             f"Available: {available}"
         )
         sys.exit(1)
+
+    if args.respect_skips:
+        today = date.today()
+        if channel_cfg.skip_weekends and today.weekday() >= 5:
+            log.info(f"Skipping {args.name}: weekend")
+            return
+        skip_dates = resolve_skip_dates(
+            config.skip_dates, channel_cfg.skip_dates,
+            global_holidays=config.skip_holidays,
+            channel_holidays=channel_cfg.skip_holidays,
+        )
+        if today in skip_dates:
+            log.info(f"Skipping {args.name}: {today} is in skip_dates")
+            return
 
     messages = args.message or channel_cfg.messages
     if not messages:
