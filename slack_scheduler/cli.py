@@ -275,7 +275,8 @@ def cmd_trigger(args):
 
     if args.respect_skips:
         today = date.today()
-        if channel_cfg.skip_weekends and today.weekday() >= 5:
+        skip_weekends = config.skip_weekends or channel_cfg.skip_weekends
+        if skip_weekends and today.weekday() >= 5:
             log.info(f"Skipping {args.name}: weekend")
             return
         skip_dates = resolve_skip_dates(

@@ -34,6 +34,7 @@ class ChannelConfig:
 class AppConfig:
     channels: list[ChannelConfig]
     default_selection_mode: str = "random"
+    skip_weekends: bool = False
     skip_dates: list[str] = field(default_factory=list)
     skip_holidays: str | None = None
 
@@ -120,6 +121,7 @@ def load_config(config_path: Path) -> AppConfig:
             f"Invalid default_selection_mode: {default_mode!r} "
             f"(expected one of {sorted(VALID_SELECTION_MODES)})"
         )
+    global_skip_weekends = raw.get("skip_weekends", False)
     global_skip = _validate_skip_dates(raw.get("skip_dates", []), "global skip_dates")
     global_skip_holidays = _validate_skip_holidays(
         raw.get("skip_holidays"), "global skip_holidays"
@@ -192,6 +194,7 @@ def load_config(config_path: Path) -> AppConfig:
     return AppConfig(
         channels=channels,
         default_selection_mode=default_mode,
+        skip_weekends=global_skip_weekends,
         skip_dates=global_skip,
         skip_holidays=global_skip_holidays,
     )
@@ -223,7 +226,7 @@ def resolve_skip_dates(
     global_holidays: str | None = None,
     channel_holidays: str | None = None,
 ) -> set[date]:
-    """Combine global and channel-specific skip dates into a set of date objects.
+    """Combine global and entry-specific skip dates into a set of date objects.
 
     All dates are guaranteed to be valid ISO format strings (validated at config load time).
     If skip_holidays is specified, the corresponding country holidays are merged in.

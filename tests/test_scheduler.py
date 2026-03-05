@@ -201,6 +201,19 @@ class TestPrintUpcoming:
             dt = datetime.strptime(ds, "%Y-%m-%d")
             assert dt.weekday() < 5, f"{ds} is a weekend day"
 
+    def test_global_skip_weekends(self, capsys):
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+        )
+        config = AppConfig(channels=[channel], skip_weekends=True)
+        print_upcoming(config, count=7)
+        out = capsys.readouterr().out
+        date_strs = re.findall(r"\d{4}-\d{2}-\d{2}", out)
+        for ds in date_strs:
+            dt = datetime.strptime(ds, "%Y-%m-%d")
+            assert dt.weekday() < 5, f"{ds} is a weekend day"
+
     def test_skip_dates_excluded(self, capsys):
         channel = ChannelConfig(
             id="C1", name="ch", messages=["hi"],

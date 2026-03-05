@@ -58,6 +58,9 @@ After running `slack-scheduler init`, edit the config file:
 # Default message selection mode: "random" or "cycle"
 default_selection_mode: "random"
 
+# Skip weekends globally (can also be set per channel entry)
+# skip_weekends: true
+
 # Skip country-specific bank holidays (ISO 3166 country code)
 # Supports subdivisions: "US-CA", "DE-BY", etc.
 # skip_holidays: "US"
@@ -262,20 +265,23 @@ A schedule at `09:00` with `jitter_minutes: 15` will fire between `09:00` and `0
 
 ### Skip Rules
 
-Skip rules are set per config entry and apply to all schedules within that entry.
+Skip rules can be set globally or per channel entry. Both levels are merged: a channel entry skips if either the global or entry-level rule applies.
 
 ```yaml
+# Global: applies to all channels
+skip_weekends: true
+skip_dates:
+  - "2026-12-24"
+skip_holidays: "US"
+
 channels:
   - id: "C1234567890"
     name: "standup"
-    skip_weekends: true
-    skip_dates:
-      - "2026-12-24"
-    skip_holidays: "NL"         # Netherlands
-    # skip_holidays: "US-CA"    # California, US
+    # Channel-level: merged with global rules
+    skip_holidays: "NL"         # Netherlands holidays added on top of US
 ```
 
-`skip_holidays` can be set globally or per config entry. Both levels are merged (union). Country codes follow [ISO 3166](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2); subdivisions use the `CC-XX` format (e.g. `US-CA`, `DE-BY`). See the [python-holidays](https://github.com/vacanza/python-holidays) docs for the full list of supported countries.
+`skip_weekends`, `skip_dates`, and `skip_holidays` can all be set globally or per channel entry. Country codes follow [ISO 3166](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2); subdivisions use the `CC-XX` format (e.g. `US-CA`, `DE-BY`). See the [python-holidays](https://github.com/vacanza/python-holidays) docs for the full list of supported countries.
 
 ## File Locations
 
@@ -321,5 +327,5 @@ Instead of the daemon, use cron to call `send` or `trigger` directly:
 0 9 * * 1-5 slack-scheduler send --channel C1234567890 --message "Good morning!" --jitter 15
 
 # Or trigger a named config entry
-0 9 * * 1-5 slack-scheduler trigger --name standup-morning --jitter 15
+0 9 * * 1-5 slack-scheduler trigger --name standup-morning --jitter 15 --respect-skips
 ```

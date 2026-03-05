@@ -7,6 +7,9 @@ default_selection_mode: "random"
 # See: https://github.com/vacanza/python-holidays
 # skip_holidays: "US"
 
+# Skip weekends globally. Can also be set per channel entry.
+# skip_weekends: true
+
 # Global skip dates (YYYY-MM-DD). Messages will not be sent on these dates.
 skip_dates:
   - "2026-12-25"

@@ -20,6 +20,7 @@ def run_daemon(
     scheduler = BlockingScheduler()
 
     for channel in config.channels:
+        skip_weekends = config.skip_weekends or channel.skip_weekends
         skip_dates = resolve_skip_dates(
             config.skip_dates, channel.skip_dates,
             global_holidays=config.skip_holidays,
@@ -32,7 +33,7 @@ def run_daemon(
                 trigger=CronTrigger.from_crontab(schedule.cron),
                 jitter=schedule.jitter_minutes * 60 if schedule.jitter_minutes else None,
                 args=[channel.id, channel.name, channel.messages, channel.selection_mode,
-                      channel.skip_weekends, skip_dates, credentials, dry_run],
+                      skip_weekends, skip_dates, credentials, dry_run],
                 id=f"{channel.name}_{i}",
                 name=f"{channel.name} ({schedule.cron})",
             )
@@ -95,6 +96,7 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
     print(f"\nUpcoming scheduled messages (next {count} per schedule):\n")
 
     for channel in config.channels:
+        skip_weekends = config.skip_weekends or channel.skip_weekends
         skip_dates = resolve_skip_dates(
             config.skip_dates, channel.skip_dates,
             global_holidays=config.skip_holidays,
@@ -119,7 +121,7 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
                 if next_time is None:
                     break
                 cursor = next_time + timedelta(seconds=1)
-                if channel.skip_weekends and next_time.date().weekday() >= 5:
+                if skip_weekends and next_time.date().weekday() >= 5:
                     continue
                 if next_time.date() in skip_dates:
                     continue

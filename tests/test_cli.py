@@ -371,6 +371,20 @@ class TestCmdTrigger:
             cmd_trigger(args)
         mock_send.assert_called_once()
 
+    def test_respect_skips_global_skip_weekends(self):
+        config = self._make_config()
+        config.skip_weekends = True
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=True)
+        saturday = date(2026, 3, 7)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch("datetime.date", wraps=date) as mock_date, \
+             patch(P_SEND) as mock_send:
+            mock_date.today.return_value = saturday
+            cmd_trigger(args)
+        mock_send.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # cmd_run
