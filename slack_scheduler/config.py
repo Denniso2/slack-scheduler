@@ -108,6 +108,16 @@ def _get_holiday_dates(holidays_code: str) -> set[date]:
     return set(holiday_dict.keys())
 
 
+def _validate_cron(cron: str, context: str) -> str:
+    from apscheduler.triggers.cron import CronTrigger
+
+    try:
+        CronTrigger.from_crontab(cron)
+    except ValueError as e:
+        raise ValueError(f"Invalid cron in {context}: {cron!r} ({e})")
+    return cron
+
+
 def load_config(config_path: Path) -> AppConfig:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
@@ -153,7 +163,10 @@ def load_config(config_path: Path) -> AppConfig:
                     f"Channel '{channel_name}' schedule at index {s_idx} is missing required field 'cron'"
                 )
             schedules.append(ScheduleConfig(
-                cron=s["cron"],
+                cron=_validate_cron(
+                    s["cron"],
+                    f"channel '{channel_name}' schedule at index {s_idx}",
+                ),
                 jitter_minutes=s.get("jitter_minutes", 0),
             ))
 

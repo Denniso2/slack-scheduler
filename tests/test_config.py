@@ -227,6 +227,17 @@ class TestLoadConfigValidation:
         with pytest.raises(ValueError, match="missing required field 'cron'"):
             load_config(p)
 
+    def test_invalid_cron_raises(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: ["hi"]
+                schedules:
+                  - cron: "bad cron"
+        """)
+        with pytest.raises(ValueError, match="Invalid cron"):
+            load_config(p)
+
     def test_invalid_channel_selection_mode_raises(self, tmp_path):
         p = self._write(tmp_path, """\
             channels:
