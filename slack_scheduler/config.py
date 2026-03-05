@@ -18,6 +18,7 @@ class ScheduleConfig:
     jitter_minutes: int = 0
     skip_weekends: bool = False
     skip_dates: list[str] = field(default_factory=list)
+    skip_holidays: str | None = None
 
 
 @dataclass
@@ -34,6 +35,7 @@ class AppConfig:
     channels: list[ChannelConfig]
     default_selection_mode: str = "random"
     skip_dates: list[str] = field(default_factory=list)
+    skip_holidays: str | None = None
 
 
 @dataclass
@@ -67,6 +69,44 @@ def _validate_skip_dates(dates: list[str], context: str) -> list[str]:
     return dates
 
 
+def _parse_holidays_code(code: str) -> tuple[str, str | None]:
+    if "-" in code:
+        country, subdiv = code.split("-", 1)
+        return country, subdiv
+    return code, None
+
+
+def _validate_skip_holidays(value: str | None, context: str) -> str | None:
+    if value is None:
+        return None
+
+    import holidays
+
+    country, subdiv = _parse_holidays_code(value)
+    try:
+        holidays.country_holidays(country, subdiv=subdiv, years=2000)
+    except NotImplementedError:
+        msg = f"Invalid skip_holidays in {context}: {value!r}"
+        if subdiv:
+            msg += f" (country {country!r} or subdivision {subdiv!r} not recognized)"
+        else:
+            msg += " (country code not recognized)"
+        raise ValueError(msg)
+
+    return value
+
+
+def _get_holiday_dates(holidays_code: str) -> set[date]:
+    import holidays
+
+    current_year = date.today().year
+    country, subdiv = _parse_holidays_code(holidays_code)
+    holiday_dict = holidays.country_holidays(
+        country, subdiv=subdiv, years=[current_year, current_year + 1]
+    )
+    return set(holiday_dict.keys())
+
+
 def load_config(config_path: Path) -> AppConfig:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
@@ -81,6 +121,9 @@ def load_config(config_path: Path) -> AppConfig:
             f"(expected one of {sorted(VALID_SELECTION_MODES)})"
         )
     global_skip = _validate_skip_dates(raw.get("skip_dates", []), "global skip_dates")
+    global_skip_holidays = _validate_skip_holidays(
+        raw.get("skip_holidays"), "global skip_holidays"
+    )
 
     channels = []
     for idx, ch in enumerate(raw.get("channels", [])):
@@ -99,11 +142,16 @@ def load_config(config_path: Path) -> AppConfig:
             schedule_skip_dates = s.get("skip_dates", [])
             context = f"channel '{channel_name}' schedule {s_idx} skip_dates"
             validated_skip_dates = _validate_skip_dates(schedule_skip_dates, context)
+            schedule_skip_holidays = _validate_skip_holidays(
+                s.get("skip_holidays"),
+                f"channel '{channel_name}' schedule {s_idx} skip_holidays",
+            )
             schedules.append(ScheduleConfig(
                 cron=s["cron"],
                 jitter_minutes=s.get("jitter_minutes", 0),
                 skip_weekends=s.get("skip_weekends", False),
                 skip_dates=validated_skip_dates,
+                skip_holidays=schedule_skip_holidays,
             ))
 
         messages = ch.get("messages", [])
@@ -132,6 +180,7 @@ def load_config(config_path: Path) -> AppConfig:
         channels=channels,
         default_selection_mode=default_mode,
         skip_dates=global_skip,
+        skip_holidays=global_skip_holidays,
     )
 
 
@@ -156,11 +205,21 @@ def load_credentials(env_path: Path) -> Credentials:
 
 
 def resolve_skip_dates(
-    global_dates: list[str], schedule_dates: list[str]
+    global_dates: list[str],
+    schedule_dates: list[str],
+    global_holidays: str | None = None,
+    schedule_holidays: str | None = None,
 ) -> set[date]:
     """Combine global and schedule-specific skip dates into a set of date objects.
 
     All dates are guaranteed to be valid ISO format strings (validated at config load time).
+    If skip_holidays is specified, the corresponding country holidays are merged in.
     """
     combined = set(global_dates) | set(schedule_dates)
-    return {date.fromisoformat(d) for d in combined}
+    result = {date.fromisoformat(d) for d in combined}
+
+    for holidays_code in (global_holidays, schedule_holidays):
+        if holidays_code is not None:
+            result |= _get_holiday_dates(holidays_code)
+
+    return result

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from slack_scheduler.auth import TokenExpiredError, TokenInvalidError
-from slack_scheduler.cli import cmd_init, cmd_send, cmd_status, cmd_validate, main
+from slack_scheduler.cli import cmd_init, cmd_run, cmd_send, cmd_status, cmd_validate, main
 from slack_scheduler.config import AppConfig, ChannelConfig, ScheduleConfig
 from slack_scheduler.sender import SendResult, SlackAPIError
 
@@ -222,17 +222,77 @@ class TestCmdSend:
 
 
 # ---------------------------------------------------------------------------
+# cmd_run
+# ---------------------------------------------------------------------------
+
+class TestCmdRun:
+    def test_skip_holidays_overrides_config(self, tmp_path):
+        args = make_args(
+            config=tmp_path / "config.yaml",
+            env=tmp_path / "creds.env",
+            skip_holidays="US",
+        )
+        mock_config = AppConfig(channels=[])
+        with patch(P_LOAD_CONFIG, return_value=mock_config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch(P_RUN_DAEMON):
+            cmd_run(args)
+        assert mock_config.skip_holidays == "US"
+
+    def test_skip_holidays_none_leaves_config(self, tmp_path):
+        args = make_args(
+            config=tmp_path / "config.yaml",
+            env=tmp_path / "creds.env",
+            skip_holidays=None,
+        )
+        mock_config = AppConfig(channels=[], skip_holidays="NL")
+        with patch(P_LOAD_CONFIG, return_value=mock_config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch(P_RUN_DAEMON):
+            cmd_run(args)
+        assert mock_config.skip_holidays == "NL"
+
+    def test_skip_holidays_invalid_raises(self, tmp_path):
+        args = make_args(
+            config=tmp_path / "config.yaml",
+            env=tmp_path / "creds.env",
+            skip_holidays="XX",
+        )
+        with patch(P_LOAD_CONFIG, return_value=AppConfig(channels=[])), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             pytest.raises(ValueError, match="not recognized"):
+            cmd_run(args)
+
+
+# ---------------------------------------------------------------------------
 # cmd_status
 # ---------------------------------------------------------------------------
 
 class TestCmdStatus:
     def test_calls_print_upcoming_with_count(self):
-        args = make_args(config=Path("/fake"), count=3)
+        args = make_args(config=Path("/fake"), count=3, skip_holidays=None)
         mock_config = MagicMock()
         with patch(P_LOAD_CONFIG, return_value=mock_config), \
              patch(P_PRINT_UPCOMING) as mock_upcoming:
             cmd_status(args)
         mock_upcoming.assert_called_once_with(mock_config, count=3)
+
+    def test_skip_holidays_overrides_config(self):
+        args = make_args(config=Path("/fake"), count=5, skip_holidays="NL")
+        mock_config = AppConfig(channels=[])
+        with patch(P_LOAD_CONFIG, return_value=mock_config), \
+             patch(P_PRINT_UPCOMING):
+            cmd_status(args)
+        assert mock_config.skip_holidays == "NL"
+
+    def test_skip_holidays_invalid_raises(self):
+        args = make_args(config=Path("/fake"), count=5, skip_holidays="XX")
+        with patch(P_LOAD_CONFIG, return_value=AppConfig(channels=[])), \
+             pytest.raises(ValueError, match="not recognized"):
+            cmd_status(args)
 
 
 # ---------------------------------------------------------------------------

@@ -21,7 +21,11 @@ def run_daemon(
 
     for channel in config.channels:
         for i, schedule in enumerate(channel.schedules):
-            skip_dates = resolve_skip_dates(config.skip_dates, schedule.skip_dates)
+            skip_dates = resolve_skip_dates(
+                config.skip_dates, schedule.skip_dates,
+                global_holidays=config.skip_holidays,
+                schedule_holidays=schedule.skip_holidays,
+            )
 
             scheduler.add_job(
                 _fire,
@@ -93,7 +97,11 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
     for channel in config.channels:
         for schedule in channel.schedules:
             trigger = CronTrigger.from_crontab(schedule.cron)
-            skip_dates = resolve_skip_dates(config.skip_dates, schedule.skip_dates)
+            skip_dates = resolve_skip_dates(
+                config.skip_dates, schedule.skip_dates,
+                global_holidays=config.skip_holidays,
+                schedule_holidays=schedule.skip_holidays,
+            )
             label = f"{channel.name} ({schedule.cron})"
             if schedule.jitter_minutes:
                 label += f" up to {schedule.jitter_minutes}min jitter"

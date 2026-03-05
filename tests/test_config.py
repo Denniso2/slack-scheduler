@@ -8,7 +8,9 @@ import pytest
 from slack_scheduler.config import (
     AppConfig,
     ScheduleConfig,
+    _get_holiday_dates,
     _validate_skip_dates,
+    _validate_skip_holidays,
     load_config,
     load_credentials,
     resolve_skip_dates,
@@ -254,3 +256,127 @@ class TestDataclassDefaults:
         b = AppConfig(channels=[])
         a.skip_dates.append("2026-01-01")
         assert b.skip_dates == []
+
+
+# --- _validate_skip_holidays ------------------------------------------------
+
+class TestValidateSkipHolidays:
+    def test_none_returns_none(self):
+        assert _validate_skip_holidays(None, "ctx") is None
+
+    def test_valid_country_code(self):
+        assert _validate_skip_holidays("US", "ctx") == "US"
+
+    def test_valid_country_with_subdivision(self):
+        assert _validate_skip_holidays("US-CA", "ctx") == "US-CA"
+
+    def test_invalid_country_raises(self):
+        with pytest.raises(ValueError, match="not recognized"):
+            _validate_skip_holidays("XX", "ctx")
+
+    def test_invalid_subdivision_raises(self):
+        with pytest.raises(ValueError, match="not recognized"):
+            _validate_skip_holidays("US-ZZ", "ctx")
+
+    def test_error_message_contains_context(self):
+        with pytest.raises(ValueError, match="my context"):
+            _validate_skip_holidays("XX", "my context")
+
+
+# --- _get_holiday_dates -----------------------------------------------------
+
+class TestGetHolidayDates:
+    def test_returns_set_of_dates(self):
+        result = _get_holiday_dates("US")
+        assert isinstance(result, set)
+        assert all(isinstance(d, date) for d in result)
+
+    def test_contains_known_holiday(self):
+        result = _get_holiday_dates("US")
+        current_year = date.today().year
+        assert date(current_year, 12, 25) in result
+
+    def test_includes_current_and_next_year(self):
+        result = _get_holiday_dates("US")
+        current_year = date.today().year
+        years = {d.year for d in result}
+        assert current_year in years
+        assert current_year + 1 in years
+
+    def test_subdivision_support(self):
+        result = _get_holiday_dates("US-CA")
+        assert len(result) > 0
+
+
+# --- resolve_skip_dates with holidays --------------------------------------
+
+class TestResolveSkipDatesWithHolidays:
+    def test_merges_global_holidays(self):
+        result = resolve_skip_dates([], [], global_holidays="US")
+        current_year = date.today().year
+        assert date(current_year, 12, 25) in result
+
+    def test_merges_schedule_holidays(self):
+        result = resolve_skip_dates([], [], schedule_holidays="NL")
+        assert len(result) > 0
+
+    def test_merges_both_holidays_and_manual_dates(self):
+        result = resolve_skip_dates(["2026-03-15"], [], global_holidays="US")
+        assert date(2026, 3, 15) in result
+        assert date(2026, 12, 25) in result
+
+    def test_none_holidays_backward_compatible(self):
+        result = resolve_skip_dates(["2026-12-25"], ["2026-07-04"])
+        assert len(result) == 2
+
+
+# --- load_config with skip_holidays ----------------------------------------
+
+class TestLoadConfigSkipHolidays:
+    def _write(self, tmp_path, text):
+        p = tmp_path / "config.yaml"
+        p.write_text(textwrap.dedent(text))
+        return p
+
+    def test_global_skip_holidays_parsed(self, tmp_path):
+        p = self._write(tmp_path, """\
+            skip_holidays: "US"
+            channels: []
+        """)
+        assert load_config(p).skip_holidays == "US"
+
+    def test_schedule_skip_holidays_parsed(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: ["hi"]
+                schedules:
+                  - cron: "0 9 * * *"
+                    skip_holidays: "NL"
+        """)
+        assert load_config(p).channels[0].schedules[0].skip_holidays == "NL"
+
+    def test_invalid_global_skip_holidays_raises(self, tmp_path):
+        p = self._write(tmp_path, """\
+            skip_holidays: "XX"
+            channels: []
+        """)
+        with pytest.raises(ValueError, match="skip_holidays"):
+            load_config(p)
+
+    def test_invalid_schedule_skip_holidays_raises(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: ["hi"]
+                schedules:
+                  - cron: "0 9 * * *"
+                    skip_holidays: "XX"
+        """)
+        with pytest.raises(ValueError, match="skip_holidays"):
+            load_config(p)
+
+    def test_skip_holidays_defaults_to_none(self, minimal_config_file):
+        cfg = load_config(minimal_config_file)
+        assert cfg.skip_holidays is None
+        assert cfg.channels[0].schedules[0].skip_holidays is None

@@ -70,8 +70,12 @@ def main():
     )
 
     # run
-    subparsers.add_parser(
+    run_parser = subparsers.add_parser(
         "run", help="Start the daemon scheduler",
+    )
+    run_parser.add_argument(
+        "--skip-holidays", type=str, default=None, metavar="COUNTRY",
+        help='Skip country-specific bank holidays (e.g. "US", "NL", "DE-BY")',
     )
 
     # status
@@ -81,6 +85,10 @@ def main():
     status_parser.add_argument(
         "--count", type=int, default=5,
         help="Number of upcoming events to show per schedule (default: 5)",
+    )
+    status_parser.add_argument(
+        "--skip-holidays", type=str, default=None, metavar="COUNTRY",
+        help='Skip country-specific bank holidays (e.g. "US", "NL", "DE-BY")',
     )
 
     # validate
@@ -228,21 +236,30 @@ def cmd_send(args):
 
 def cmd_run(args):
     from slack_scheduler.auth import validate_credentials
-    from slack_scheduler.config import load_config, load_credentials
+    from slack_scheduler.config import _validate_skip_holidays, load_config, load_credentials
     from slack_scheduler.scheduler import run_daemon
 
     config = load_config(args.config)
     credentials = load_credentials(args.env)
     validate_credentials(credentials)
 
+    if args.skip_holidays is not None:
+        _validate_skip_holidays(args.skip_holidays, "CLI --skip-holidays")
+        config.skip_holidays = args.skip_holidays
+
     run_daemon(config, credentials, dry_run=args.dry_run)
 
 
 def cmd_status(args):
-    from slack_scheduler.config import load_config
+    from slack_scheduler.config import _validate_skip_holidays, load_config
     from slack_scheduler.scheduler import print_upcoming
 
     config = load_config(args.config)
+
+    if args.skip_holidays is not None:
+        _validate_skip_holidays(args.skip_holidays, "CLI --skip-holidays")
+        config.skip_holidays = args.skip_holidays
+
     print_upcoming(config, count=args.count)
 
 

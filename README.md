@@ -58,6 +58,10 @@ After running `slack-scheduler init`, edit the config file:
 # Default message selection mode: "random" or "cycle"
 default_selection_mode: "random"
 
+# Skip country-specific bank holidays (ISO 3166 country code)
+# Supports subdivisions: "US-CA", "DE-BY", etc.
+# skip_holidays: "US"
+
 # Dates to skip globally (YYYY-MM-DD)
 skip_dates:
   - "2026-12-25"
@@ -137,9 +141,16 @@ slack-scheduler --dry-run send --channel C1234567890 --message "Test"
 ```bash
 slack-scheduler run
 
+# Skip bank holidays for a specific country
+slack-scheduler run --skip-holidays NL
+
 # Preview mode (logs what would be sent)
 slack-scheduler --dry-run run
 ```
+
+| Flag | Description |
+|---|---|
+| `--skip-holidays <country>` | Skip country-specific bank holidays (e.g. `US`, `NL`, `DE-BY`) |
 
 Runs continuously and sends messages according to your config schedules. Stop with `Ctrl-C`.
 
@@ -150,6 +161,9 @@ slack-scheduler status
 
 # Show next 10 per schedule
 slack-scheduler status --count 10
+
+# Preview with holiday skipping
+slack-scheduler status --skip-holidays US
 ```
 
 ### `validate` — Check credentials
@@ -231,7 +245,13 @@ skip_weekends: true
 # Skip specific dates (per-schedule, merged with global skip_dates)
 skip_dates:
   - "2026-12-24"
+
+# Skip country-specific bank holidays
+skip_holidays: "NL"         # Netherlands
+# skip_holidays: "US-CA"    # California, US
 ```
+
+`skip_holidays` can be set globally or per-schedule. Both levels are merged (union). Country codes follow [ISO 3166](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2); subdivisions use the `CC-XX` format (e.g. `US-CA`, `DE-BY`). See the [python-holidays](https://github.com/vacanza/python-holidays) docs for the full list of supported countries.
 
 ## File Locations
 

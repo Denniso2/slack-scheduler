@@ -224,3 +224,30 @@ class TestPrintUpcoming:
     def test_no_jitter_label_when_zero(self, app_config, capsys):
         print_upcoming(app_config, count=1)
         assert "jitter" not in capsys.readouterr().out
+
+    def test_skip_holidays_excluded(self, capsys):
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+        )
+        config = AppConfig(channels=[channel], skip_holidays="US")
+        print_upcoming(config, count=10)
+        assert "2026-12-25" not in capsys.readouterr().out
+
+
+class TestRunDaemonHolidays:
+    def test_passes_holidays_to_resolve(self, credentials_obj):
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *", skip_holidays="NL")],
+        )
+        config = AppConfig(channels=[channel], skip_holidays="US")
+        with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched, \
+             patch("slack_scheduler.scheduler.resolve_skip_dates") as mock_resolve:
+            instance = MockSched.return_value
+            instance.get_jobs.return_value = [MagicMock()]
+            mock_resolve.return_value = set()
+            run_daemon(config, credentials_obj)
+        mock_resolve.assert_called_once_with(
+            [], [], global_holidays="US", schedule_holidays="NL",
+        )

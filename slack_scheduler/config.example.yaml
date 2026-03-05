@@ -2,6 +2,11 @@
 # Options: "random" | "cycle"
 default_selection_mode: "random"
 
+# Skip country-specific bank holidays globally.
+# Uses ISO 3166 country codes. Supports subdivisions (e.g. "US-CA", "DE-BY").
+# See: https://github.com/vacanza/python-holidays
+# skip_holidays: "US"
+
 # Global skip dates (YYYY-MM-DD). Messages will not be sent on these dates.
 skip_dates:
   - "2026-12-25"
@@ -22,6 +27,7 @@ channels:
       - cron: "0 9 * * 1-5"
         jitter_minutes: 15
         skip_weekends: true
+        # skip_holidays: "US-CA"  # Skip California state holidays too
 
   - id: "C0987654321"
     name: "random-chat"
