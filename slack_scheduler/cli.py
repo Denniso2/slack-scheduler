@@ -210,15 +210,17 @@ def cmd_send(args):
     from datetime import datetime
 
     from slack_scheduler.auth import validate_credentials
-    from slack_scheduler.config import load_config, load_credentials
+    from slack_scheduler.config import Credentials, load_config, load_credentials
     from slack_scheduler.sender import send_message
     from slack_scheduler.templates import render
 
-    credentials = load_credentials(args.env)
-
     config = load_config(args.config) if args.config.exists() else None
 
-    validate_credentials(credentials)
+    if args.dry_run:
+        credentials = Credentials(xoxc_token="", d_cookie="")
+    else:
+        credentials = load_credentials(args.env)
+        validate_credentials(credentials)
 
     selection_mode = args.selection_mode or (config.default_selection_mode if config else "random")
     if selection_mode == "cycle":
@@ -253,14 +255,22 @@ def cmd_trigger(args):
     from datetime import date, datetime
 
     from slack_scheduler.auth import validate_credentials
-    from slack_scheduler.config import load_config, load_credentials, resolve_skip_dates
+    from slack_scheduler.config import (
+        Credentials,
+        load_config,
+        load_credentials,
+        resolve_skip_dates,
+    )
     from slack_scheduler.selector import pick_message
     from slack_scheduler.sender import send_message
     from slack_scheduler.templates import render
 
     config = load_config(args.config)
-    credentials = load_credentials(args.env)
-    validate_credentials(credentials)
+    if args.dry_run:
+        credentials = Credentials(xoxc_token="", d_cookie="")
+    else:
+        credentials = load_credentials(args.env)
+        validate_credentials(credentials)
 
     channel_cfg = next(
         (c for c in config.channels if c.name == args.name), None

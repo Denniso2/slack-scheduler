@@ -184,6 +184,22 @@ class TestCmdSend:
         mock_pick.assert_called_once_with("C1", ["a", "b", "c"], "cycle")
         assert "Message sent" in capsys.readouterr().out
 
+    def test_dry_run_does_not_require_credentials(self, tmp_path, capsys):
+        mock_result = SendResult(ok=True, channel_id="C1", message="hello")
+        args = make_args(
+            channel="C1", message=["hello"],
+            jitter=0, selection_mode=None,
+            env=tmp_path / "missing.env", config=tmp_path / "missing.yaml",
+            dry_run=True,
+        )
+        with patch(P_VALIDATE) as mock_validate, \
+             patch(P_SEND, return_value=mock_result) as mock_send, \
+             patch(P_RENDER, side_effect=lambda m, *a: m):
+            cmd_send(args)
+        mock_validate.assert_not_called()
+        assert mock_send.call_args.kwargs["dry_run"] is True
+        assert "Message sent" in capsys.readouterr().out
+
 
 
 # ---------------------------------------------------------------------------
@@ -384,6 +400,23 @@ class TestCmdTrigger:
             mock_date.today.return_value = saturday
             cmd_trigger(args)
         mock_send.assert_not_called()
+
+    def test_dry_run_does_not_require_credentials(self, tmp_path, capsys):
+        config = self._make_config()
+        mock_result = SendResult(ok=True, channel_id="C1", message="Good morning!", ts="1")
+        args = make_args(
+            name="standup", message=None, jitter=0, selection_mode=None,
+            respect_skips=False, dry_run=True, env=tmp_path / "missing.env",
+        )
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_VALIDATE) as mock_validate, \
+             patch(P_SEND, return_value=mock_result) as mock_send, \
+             patch(P_RENDER, side_effect=lambda m, *a: m), \
+             patch("random.choice", return_value="Good morning!"):
+            cmd_trigger(args)
+        mock_validate.assert_not_called()
+        assert mock_send.call_args.kwargs["dry_run"] is True
+        assert "Triggered standup" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------
