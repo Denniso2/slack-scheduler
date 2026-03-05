@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from slack_scheduler.auth import TokenExpiredError, TokenInvalidError
-from slack_scheduler.cli import cmd_init, cmd_run, cmd_send, cmd_status, cmd_validate, main
+from slack_scheduler.cli import cmd_init, cmd_run, cmd_send, cmd_status, cmd_trigger, cmd_validate, main
 from slack_scheduler.config import AppConfig, ChannelConfig, ScheduleConfig
 from slack_scheduler.sender import SendResult, SlackAPIError
 
@@ -121,18 +121,6 @@ class TestCmdSend:
             cmd_send(args)
         assert "Message sent" in capsys.readouterr().out
 
-    def test_exits_without_message_and_no_config(self, tmp_path):
-        args = make_args(
-            channel="C1", message=None,
-            jitter=0, selection_mode=None,
-            env=tmp_path / "creds.env", config=tmp_path / "missing.yaml",
-        )
-        with patch(P_LOAD_CREDS, return_value=MagicMock()), \
-             patch(P_VALIDATE), \
-             pytest.raises(SystemExit) as exc_info:
-            cmd_send(args)
-        assert exc_info.value.code == 1
-
     def test_jitter_calls_sleep(self, tmp_path):
         mock_result = SendResult(ok=True, channel_id="C1", message="hi")
         args = make_args(
@@ -195,30 +183,138 @@ class TestCmdSend:
         mock_pick.assert_called_once_with("C1", ["a", "b", "c"], "cycle")
         assert "Message sent" in capsys.readouterr().out
 
-    def test_uses_config_messages_when_no_cli_message(self, tmp_path, capsys):
-        channel = ChannelConfig(
-            id="C1", name="general",
-            messages=["from config"],
-            schedules=[ScheduleConfig(cron="0 9 * * *")],
+
+
+# ---------------------------------------------------------------------------
+# cmd_trigger
+# ---------------------------------------------------------------------------
+
+class TestCmdTrigger:
+    def _make_config(self, **channel_overrides):
+        channel_defaults = dict(
+            id="C1", name="standup",
+            messages=["Good morning!", "Rise and shine!"],
+            schedules=[ScheduleConfig(cron="0 9 * * 1-5")],
             selection_mode="random",
         )
-        config = AppConfig(channels=[channel])
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("placeholder")
-        args = make_args(
-            channel="C1", message=None,
-            jitter=0, selection_mode=None,
-            env=tmp_path / "creds.env", config=config_file,
-        )
-        mock_result = SendResult(ok=True, channel_id="C1", message="from config", ts="1")
-        with patch(P_LOAD_CREDS, return_value=MagicMock()), \
-             patch(P_LOAD_CONFIG, return_value=config), \
+        channel_defaults.update(channel_overrides)
+        return AppConfig(channels=[ChannelConfig(**channel_defaults)])
+
+    def test_sends_config_message(self, capsys):
+        config = self._make_config()
+        mock_result = SendResult(ok=True, channel_id="C1", message="Good morning!", ts="1")
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch(P_SEND, return_value=mock_result) as mock_send, \
+             patch(P_RENDER, side_effect=lambda m, *a: m), \
+             patch("random.choice", return_value="Good morning!"):
+            cmd_trigger(args)
+        mock_send.assert_called_once()
+        assert mock_send.call_args.kwargs["channel_id"] == "C1"
+        assert "Triggered standup" in capsys.readouterr().out
+
+    def test_unknown_name_exits_1(self):
+        config = self._make_config()
+        args = make_args(name="nonexistent", message=None, jitter=0, selection_mode=None)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             pytest.raises(SystemExit) as exc_info:
+            cmd_trigger(args)
+        assert exc_info.value.code == 1
+
+    def test_message_override(self, capsys):
+        config = self._make_config()
+        mock_result = SendResult(ok=True, channel_id="C1", message="override", ts="1")
+        args = make_args(name="standup", message=["override"], jitter=0, selection_mode=None)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
              patch(P_SEND, return_value=mock_result), \
+             patch(P_RENDER, side_effect=lambda m, *a: m):
+            cmd_trigger(args)
+        assert "override" in capsys.readouterr().out
+
+    def test_selection_mode_override(self, capsys):
+        config = self._make_config(selection_mode="random")
+        mock_result = SendResult(ok=True, channel_id="C1", message="a", ts="1")
+        args = make_args(name="standup", message=None, jitter=0, selection_mode="cycle")
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch(P_PICK, return_value="a") as mock_pick, \
+             patch(P_SEND, return_value=mock_result), \
+             patch(P_RENDER, side_effect=lambda m, *a: m):
+            cmd_trigger(args)
+        mock_pick.assert_called_once_with("standup", ["Good morning!", "Rise and shine!"], "cycle")
+
+    def test_jitter_calls_sleep(self):
+        config = self._make_config()
+        mock_result = SendResult(ok=True, channel_id="C1", message="hi", ts="1")
+        args = make_args(name="standup", message=None, jitter=5, selection_mode=None)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch(P_PICK, return_value="hi"), \
+             patch(P_SEND, return_value=mock_result), \
              patch(P_RENDER, side_effect=lambda m, *a: m), \
-             patch(P_PICK, return_value="from config"):
-            cmd_send(args)
-        assert "Message sent" in capsys.readouterr().out
+             patch(P_SLEEP) as mock_sleep:
+            cmd_trigger(args)
+        mock_sleep.assert_called_once()
+
+    def test_zero_jitter_no_sleep(self):
+        config = self._make_config()
+        mock_result = SendResult(ok=True, channel_id="C1", message="hi", ts="1")
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch(P_PICK, return_value="hi"), \
+             patch(P_SEND, return_value=mock_result), \
+             patch(P_RENDER, side_effect=lambda m, *a: m), \
+             patch(P_SLEEP) as mock_sleep:
+            cmd_trigger(args)
+        mock_sleep.assert_not_called()
+
+    def test_failed_send_exits_1(self):
+        config = self._make_config()
+        mock_result = SendResult(ok=False, channel_id="C1", message="hi",
+                                 error_code="channel_not_found")
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch(P_PICK, return_value="hi"), \
+             patch(P_SEND, return_value=mock_result), \
+             patch(P_RENDER, side_effect=lambda m, *a: m), \
+             pytest.raises(SystemExit) as exc_info:
+            cmd_trigger(args)
+        assert exc_info.value.code == 1
+
+    def test_no_messages_exits_1(self):
+        config = self._make_config(messages=[])
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             pytest.raises(SystemExit) as exc_info:
+            cmd_trigger(args)
+        assert exc_info.value.code == 1
+
+    def test_dry_run_forwarded(self, capsys):
+        config = self._make_config()
+        mock_result = SendResult(ok=True, channel_id="C1", message="hi", ts="1")
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, dry_run=True)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch(P_PICK, return_value="hi"), \
+             patch(P_SEND, return_value=mock_result) as mock_send, \
+             patch(P_RENDER, side_effect=lambda m, *a: m):
+            cmd_trigger(args)
+        assert mock_send.call_args.kwargs["dry_run"] is True
 
 
 # ---------------------------------------------------------------------------

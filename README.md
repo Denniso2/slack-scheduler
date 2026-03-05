@@ -119,9 +119,6 @@ slack-scheduler send --channel C1234567890 --message "Hello!" "Hey there!" "Morn
 # Cycle through messages (no repeats until all are used)
 slack-scheduler send --channel C1234567890 --message "Hello!" "Hey!" "Morning!" --selection-mode cycle
 
-# Use messages from config file
-slack-scheduler send --channel C1234567890
-
 # Add a random delay before sending (useful with cron)
 slack-scheduler send --channel C1234567890 --message "Good morning!" --jitter 15
 
@@ -132,7 +129,30 @@ slack-scheduler --dry-run send --channel C1234567890 --message "Test"
 | Flag | Description |
 |---|---|
 | `--channel` (required) | Target channel ID |
-| `--message` | One or more messages (random selection by default) |
+| `--message` (required) | One or more messages (random selection by default) |
+| `--jitter <minutes>` | Random delay of 0 to N minutes before sending |
+| `--selection-mode` | `random` or `cycle` (overrides config) |
+
+### `trigger` — Fire a config entry once
+
+```bash
+# Trigger a named channel config entry
+slack-scheduler trigger --name standup-morning
+
+# Override messages from config
+slack-scheduler trigger --name standup-morning --message "Custom message"
+
+# With jitter
+slack-scheduler trigger --name standup-morning --jitter 10
+
+# Preview without sending
+slack-scheduler --dry-run trigger --name standup-morning
+```
+
+| Flag | Description |
+|---|---|
+| `--name` (required) | Name of the channel config entry to trigger |
+| `--message` | Override message (multiple for random/cycle selection) |
 | `--jitter <minutes>` | Random delay of 0 to N minutes before sending |
 | `--selection-mode` | `random` or `cycle` (overrides config) |
 
@@ -290,9 +310,12 @@ systemctl --user enable --now slack-scheduler
 
 ### cron (alternative)
 
-Instead of the daemon, use cron to call `send` directly:
+Instead of the daemon, use cron to call `send` or `trigger` directly:
 
 ```bash
 # crontab -e
 0 9 * * 1-5 slack-scheduler send --channel C1234567890 --message "Good morning!" --jitter 15
+
+# Or trigger a named config entry
+0 9 * * 1-5 slack-scheduler trigger --name standup-morning --jitter 15
 ```

@@ -57,7 +57,7 @@ def main():
         help="Target channel ID",
     )
     send_parser.add_argument(
-        "--message", type=str, nargs="+",
+        "--message", type=str, nargs="+", required=True,
         help="Message text (multiple for random selection)",
     )
     send_parser.add_argument(
@@ -65,6 +65,27 @@ def main():
         help="Random delay in minutes before sending (e.g. --jitter 15 waits 0-15 min)",
     )
     send_parser.add_argument(
+        "--selection-mode", type=str, choices=["random", "cycle"],
+        help="Message selection mode (overrides config)",
+    )
+
+    # trigger
+    trigger_parser = subparsers.add_parser(
+        "trigger", help="Fire a named config entry once",
+    )
+    trigger_parser.add_argument(
+        "--name", type=str, required=True,
+        help="Name of the channel config entry to trigger",
+    )
+    trigger_parser.add_argument(
+        "--message", type=str, nargs="+",
+        help="Override message (multiple for random/cycle selection)",
+    )
+    trigger_parser.add_argument(
+        "--jitter", type=int, default=0,
+        help="Random delay in minutes before sending (e.g. --jitter 15 waits 0-15 min)",
+    )
+    trigger_parser.add_argument(
         "--selection-mode", type=str, choices=["random", "cycle"],
         help="Message selection mode (overrides config)",
     )
@@ -109,6 +130,8 @@ def main():
             cmd_init(args)
         elif args.command == "send":
             cmd_send(args)
+        elif args.command == "trigger":
+            cmd_trigger(args)
         elif args.command == "run":
             cmd_run(args)
         elif args.command == "status":
@@ -193,25 +216,12 @@ def cmd_send(args):
 
     validate_credentials(credentials)
 
-    if args.message:
-        selection_mode = args.selection_mode or (config.default_selection_mode if config else "random")
-        if selection_mode == "cycle":
-            from slack_scheduler.selector import pick_message
-            message = pick_message(args.channel, args.message, "cycle")
-        else:
-            message = random.choice(args.message)
-    elif config:
-        channel_cfg = next((c for c in config.channels if c.id == args.channel), None)
-        if channel_cfg and channel_cfg.messages:
-            from slack_scheduler.selector import pick_message
-            mode = args.selection_mode or channel_cfg.selection_mode
-            message = pick_message(channel_cfg.name, channel_cfg.messages, mode)
-        else:
-            log.error("No --message provided and no messages in config for this channel.")
-            sys.exit(1)
+    selection_mode = args.selection_mode or (config.default_selection_mode if config else "random")
+    if selection_mode == "cycle":
+        from slack_scheduler.selector import pick_message
+        message = pick_message(args.channel, args.message, "cycle")
     else:
-        log.error("No --message provided and no config file found.")
-        sys.exit(1)
+        message = random.choice(args.message)
 
     message = render(message, datetime.now())
 
@@ -231,6 +241,63 @@ def cmd_send(args):
         print(f"Message sent: {message!r}")
     else:
         log.error(f"Failed to send: {result.error_code}")
+        sys.exit(1)
+
+
+def cmd_trigger(args):
+    import time
+    from datetime import datetime
+
+    from slack_scheduler.auth import validate_credentials
+    from slack_scheduler.config import load_config, load_credentials
+    from slack_scheduler.selector import pick_message
+    from slack_scheduler.sender import send_message
+    from slack_scheduler.templates import render
+
+    config = load_config(args.config)
+    credentials = load_credentials(args.env)
+    validate_credentials(credentials)
+
+    channel_cfg = next(
+        (c for c in config.channels if c.name == args.name), None
+    )
+    if channel_cfg is None:
+        available = ", ".join(c.name for c in config.channels)
+        log.error(
+            f"No channel config entry named {args.name!r}. "
+            f"Available: {available}"
+        )
+        sys.exit(1)
+
+    messages = args.message or channel_cfg.messages
+    if not messages:
+        log.error(f"Channel {args.name!r} has no messages and no --message provided.")
+        sys.exit(1)
+
+    mode = args.selection_mode or channel_cfg.selection_mode
+    if mode == "cycle":
+        message = pick_message(channel_cfg.name, messages, "cycle")
+    else:
+        message = random.choice(messages)
+
+    message = render(message, datetime.now())
+
+    if args.jitter > 0:
+        delay = random.uniform(0, args.jitter * 60)
+        log.info(f"Jitter: waiting {delay:.0f}s before sending")
+        time.sleep(delay)
+
+    result = send_message(
+        channel_id=channel_cfg.id,
+        message=message,
+        credentials=credentials,
+        dry_run=args.dry_run,
+    )
+
+    if result.ok:
+        print(f"Triggered {args.name}: {message!r}")
+    else:
+        log.error(f"Failed to trigger {args.name}: {result.error_code}")
         sys.exit(1)
 
 
