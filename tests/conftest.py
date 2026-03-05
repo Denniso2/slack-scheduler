@@ -53,7 +53,6 @@ def empty_creds_env(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 MINIMAL_CONFIG_YAML = textwrap.dedent("""\
-    workspace_url: "https://test.slack.com"
     channels:
       - id: "C111"
         name: "general"
@@ -64,7 +63,6 @@ MINIMAL_CONFIG_YAML = textwrap.dedent("""\
 """)
 
 FULL_CONFIG_YAML = textwrap.dedent("""\
-    workspace_url: "https://test.slack.com"
     default_selection_mode: "cycle"
     skip_dates:
       - "2026-12-25"
@@ -134,7 +132,6 @@ def channel_config(schedule_config: ScheduleConfig) -> ChannelConfig:
 @pytest.fixture
 def app_config(channel_config: ChannelConfig) -> AppConfig:
     return AppConfig(
-        workspace_url="https://test.slack.com",
         channels=[channel_config],
         default_selection_mode="random",
         skip_dates=[],

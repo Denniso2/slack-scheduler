@@ -55,8 +55,6 @@ SLACK_D_COOKIE=xoxd-your-actual-cookie
 After running `slack-scheduler init`, edit the config file:
 
 ```yaml
-workspace_url: "https://your-company.slack.com"
-
 # Default message selection mode: "random" or "cycle"
 default_selection_mode: "random"
 
@@ -123,9 +121,6 @@ slack-scheduler send --channel C1234567890
 # Add a random delay before sending (useful with cron)
 slack-scheduler send --channel C1234567890 --message "Good morning!" --jitter 15
 
-# Override workspace URL
-slack-scheduler send --channel C1234567890 --message "Hi" --workspace https://other.slack.com
-
 # Preview without sending
 slack-scheduler --dry-run send --channel C1234567890 --message "Test"
 ```
@@ -134,7 +129,6 @@ slack-scheduler --dry-run send --channel C1234567890 --message "Test"
 |---|---|
 | `--channel` (required) | Target channel ID |
 | `--message` | One or more messages (random selection by default) |
-| `--workspace` | Workspace URL (overrides config) |
 | `--jitter <minutes>` | Random delay of 0 to N minutes before sending |
 | `--selection-mode` | `random` or `cycle` (overrides config) |
 

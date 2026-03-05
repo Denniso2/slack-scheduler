@@ -101,7 +101,6 @@ class TestLoadCredentials:
 class TestLoadConfigHappyPath:
     def test_loads_minimal_config(self, minimal_config_file):
         cfg = load_config(minimal_config_file)
-        assert cfg.workspace_url == "https://test.slack.com"
         assert len(cfg.channels) == 1
 
     def test_loads_full_config(self, full_config_file):
@@ -133,7 +132,6 @@ class TestLoadConfigHappyPath:
     def test_channel_name_defaults_to_id(self, tmp_path):
         p = tmp_path / "config.yaml"
         p.write_text(textwrap.dedent("""\
-            workspace_url: "https://test.slack.com"
             channels:
               - id: "C999"
                 messages: ["hi"]
@@ -145,7 +143,6 @@ class TestLoadConfigHappyPath:
     def test_selection_mode_inherits_from_default(self, tmp_path):
         p = tmp_path / "config.yaml"
         p.write_text(textwrap.dedent("""\
-            workspace_url: "https://test.slack.com"
             default_selection_mode: "cycle"
             channels:
               - id: "C111"
@@ -157,7 +154,7 @@ class TestLoadConfigHappyPath:
 
     def test_no_channels_key_returns_empty_list(self, tmp_path):
         p = tmp_path / "config.yaml"
-        p.write_text('workspace_url: "https://test.slack.com"\n')
+        p.write_text('default_selection_mode: "random"\n')
         assert load_config(p).channels == []
 
     def test_default_selection_mode_defaults_to_random(self, minimal_config_file):
@@ -178,14 +175,8 @@ class TestLoadConfigValidation:
         with pytest.raises(ValueError, match="empty"):
             load_config(p)
 
-    def test_missing_workspace_url_raises(self, tmp_path):
-        p = self._write(tmp_path, "channels: []\n")
-        with pytest.raises(ValueError, match="workspace_url"):
-            load_config(p)
-
     def test_invalid_default_selection_mode_raises(self, tmp_path):
         p = self._write(tmp_path, """\
-            workspace_url: "https://test.slack.com"
             default_selection_mode: "weekly"
             channels: []
         """)
@@ -194,7 +185,6 @@ class TestLoadConfigValidation:
 
     def test_channel_missing_id_raises(self, tmp_path):
         p = self._write(tmp_path, """\
-            workspace_url: "https://test.slack.com"
             channels:
               - name: "oops"
                 messages: ["hi"]
@@ -206,7 +196,6 @@ class TestLoadConfigValidation:
 
     def test_schedule_missing_cron_raises(self, tmp_path):
         p = self._write(tmp_path, """\
-            workspace_url: "https://test.slack.com"
             channels:
               - id: "C111"
                 messages: ["hi"]
@@ -218,7 +207,6 @@ class TestLoadConfigValidation:
 
     def test_invalid_channel_selection_mode_raises(self, tmp_path):
         p = self._write(tmp_path, """\
-            workspace_url: "https://test.slack.com"
             channels:
               - id: "C111"
                 selection_mode: "bogus"
@@ -231,7 +219,6 @@ class TestLoadConfigValidation:
 
     def test_invalid_global_skip_date_raises(self, tmp_path):
         p = self._write(tmp_path, """\
-            workspace_url: "https://test.slack.com"
             skip_dates:
               - "25/12/2026"
             channels: []
@@ -241,7 +228,6 @@ class TestLoadConfigValidation:
 
     def test_invalid_schedule_skip_date_raises(self, tmp_path):
         p = self._write(tmp_path, """\
-            workspace_url: "https://test.slack.com"
             channels:
               - id: "C111"
                 messages: ["hi"]
@@ -264,7 +250,7 @@ class TestDataclassDefaults:
         assert b.skip_dates == []
 
     def test_app_config_skip_dates_not_shared(self):
-        a = AppConfig(workspace_url="x", channels=[])
-        b = AppConfig(workspace_url="y", channels=[])
+        a = AppConfig(channels=[])
+        b = AppConfig(channels=[])
         a.skip_dates.append("2026-01-01")
         assert b.skip_dates == []

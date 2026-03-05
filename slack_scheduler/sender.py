@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import requests
 
 from slack_scheduler.auth import TokenExpiredError
-from slack_scheduler.config import Credentials
+from slack_scheduler.config import SLACK_API_BASE, Credentials
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +29,6 @@ def send_message(
     channel_id: str,
     message: str,
     credentials: Credentials,
-    workspace_url: str,
     dry_run: bool = False,
     max_attempts: int = 3,
     max_rate_limit_retries: int = 5,
@@ -44,7 +43,7 @@ def send_message(
     while attempt < max_attempts:
         attempt += 1
         try:
-            response = _post(channel_id, message, credentials, workspace_url)
+            response = _post(channel_id, message, credentials)
             try:
                 data = response.json()
             except (ValueError, requests.JSONDecodeError):
@@ -107,10 +106,9 @@ def _post(
     channel_id: str,
     message: str,
     credentials: Credentials,
-    workspace_url: str,
 ) -> requests.Response:
     response = requests.post(
-        f"{workspace_url.rstrip('/')}/api/chat.postMessage",
+        f"{SLACK_API_BASE}/chat.postMessage",
         headers={
             "Authorization": f"Bearer {credentials.xoxc_token}",
             "Content-Type": "application/json; charset=utf-8",

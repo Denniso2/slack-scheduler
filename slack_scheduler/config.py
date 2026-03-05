@@ -9,6 +9,7 @@ from dotenv import dotenv_values
 log = logging.getLogger(__name__)
 
 VALID_SELECTION_MODES = {"random", "cycle"}
+SLACK_API_BASE = "https://slack.com/api"
 
 
 @dataclass
@@ -30,7 +31,6 @@ class ChannelConfig:
 
 @dataclass
 class AppConfig:
-    workspace_url: str
     channels: list[ChannelConfig]
     default_selection_mode: str = "random"
     skip_dates: list[str] = field(default_factory=list)
@@ -73,10 +73,6 @@ def load_config(config_path: Path) -> AppConfig:
 
     if not raw:
         raise ValueError(f"Config file is empty: {config_path}")
-
-    workspace_url = raw.get("workspace_url")
-    if not workspace_url:
-        raise ValueError("workspace_url is required in config")
 
     default_mode = raw.get("default_selection_mode", "random")
     if default_mode not in VALID_SELECTION_MODES:
@@ -133,7 +129,6 @@ def load_config(config_path: Path) -> AppConfig:
         ))
 
     return AppConfig(
-        workspace_url=workspace_url,
         channels=channels,
         default_selection_mode=default_mode,
         skip_dates=global_skip,

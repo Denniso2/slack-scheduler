@@ -61,10 +61,6 @@ def main():
         help="Message text (multiple for random selection)",
     )
     send_parser.add_argument(
-        "--workspace", type=str,
-        help="Workspace URL (overrides config)",
-    )
-    send_parser.add_argument(
         "--jitter", type=int, default=0,
         help="Random delay in minutes before sending (e.g. --jitter 15 waits 0-15 min)",
     )
@@ -187,14 +183,7 @@ def cmd_send(args):
 
     config = load_config(args.config) if args.config.exists() else None
 
-    workspace_url = args.workspace
-    if not workspace_url and config:
-        workspace_url = config.workspace_url
-    if not workspace_url:
-        log.error("Workspace URL required. Use --workspace or set it in config.yaml.")
-        sys.exit(1)
-
-    validate_credentials(credentials, workspace_url)
+    validate_credentials(credentials)
 
     if args.message:
         selection_mode = args.selection_mode or (config.default_selection_mode if config else "random")
@@ -227,7 +216,6 @@ def cmd_send(args):
         channel_id=args.channel,
         message=message,
         credentials=credentials,
-        workspace_url=workspace_url,
         dry_run=args.dry_run,
     )
 
@@ -245,7 +233,7 @@ def cmd_run(args):
 
     config = load_config(args.config)
     credentials = load_credentials(args.env)
-    validate_credentials(credentials, config.workspace_url)
+    validate_credentials(credentials)
 
     run_daemon(config, credentials, dry_run=args.dry_run)
 
@@ -260,20 +248,10 @@ def cmd_status(args):
 
 def cmd_validate(args):
     from slack_scheduler.auth import validate_credentials
-    from slack_scheduler.config import load_config, load_credentials
+    from slack_scheduler.config import load_credentials
 
     credentials = load_credentials(args.env)
-
-    workspace_url = None
-    if args.config.exists():
-        config = load_config(args.config)
-        workspace_url = config.workspace_url
-
-    if not workspace_url:
-        log.error("Workspace URL required. Set it in config.yaml.")
-        sys.exit(1)
-
-    validate_credentials(credentials, workspace_url)
+    validate_credentials(credentials)
     print("Credentials are valid.")
 
 

@@ -110,7 +110,7 @@ class TestCmdSend:
     def test_sends_cli_message(self, tmp_path, capsys):
         mock_result = SendResult(ok=True, channel_id="C1", message="hello", ts="1")
         args = make_args(
-            channel="C1", message=["hello"], workspace="https://test.slack.com",
+            channel="C1", message=["hello"],
             jitter=0, selection_mode=None,
             env=tmp_path / "creds.env", config=tmp_path / "missing.yaml",
         )
@@ -121,20 +121,9 @@ class TestCmdSend:
             cmd_send(args)
         assert "Message sent" in capsys.readouterr().out
 
-    def test_exits_without_workspace_url(self, tmp_path):
-        args = make_args(
-            channel="C1", message=["hi"], workspace=None,
-            jitter=0, selection_mode=None,
-            env=tmp_path / "creds.env", config=tmp_path / "missing.yaml",
-        )
-        with patch(P_LOAD_CREDS, return_value=MagicMock()), \
-             pytest.raises(SystemExit) as exc_info:
-            cmd_send(args)
-        assert exc_info.value.code == 1
-
     def test_exits_without_message_and_no_config(self, tmp_path):
         args = make_args(
-            channel="C1", message=None, workspace="https://test.slack.com",
+            channel="C1", message=None,
             jitter=0, selection_mode=None,
             env=tmp_path / "creds.env", config=tmp_path / "missing.yaml",
         )
@@ -147,7 +136,7 @@ class TestCmdSend:
     def test_jitter_calls_sleep(self, tmp_path):
         mock_result = SendResult(ok=True, channel_id="C1", message="hi")
         args = make_args(
-            channel="C1", message=["hi"], workspace="https://test.slack.com",
+            channel="C1", message=["hi"],
             jitter=5, selection_mode=None,
             env=tmp_path / "creds.env", config=tmp_path / "missing.yaml",
         )
@@ -162,7 +151,7 @@ class TestCmdSend:
     def test_zero_jitter_no_sleep(self, tmp_path):
         mock_result = SendResult(ok=True, channel_id="C1", message="hi")
         args = make_args(
-            channel="C1", message=["hi"], workspace="https://test.slack.com",
+            channel="C1", message=["hi"],
             jitter=0, selection_mode=None,
             env=tmp_path / "creds.env", config=tmp_path / "missing.yaml",
         )
@@ -178,7 +167,7 @@ class TestCmdSend:
         mock_result = SendResult(ok=False, channel_id="C1", message="hi",
                                  error_code="channel_not_found")
         args = make_args(
-            channel="C1", message=["hi"], workspace="https://test.slack.com",
+            channel="C1", message=["hi"],
             jitter=0, selection_mode=None,
             env=tmp_path / "creds.env", config=tmp_path / "missing.yaml",
         )
@@ -194,7 +183,6 @@ class TestCmdSend:
         mock_result = SendResult(ok=True, channel_id="C1", message="a", ts="1")
         args = make_args(
             channel="C1", message=["a", "b", "c"],
-            workspace="https://test.slack.com",
             jitter=0, selection_mode="cycle",
             env=tmp_path / "creds.env", config=tmp_path / "missing.yaml",
         )
@@ -214,14 +202,11 @@ class TestCmdSend:
             schedules=[ScheduleConfig(cron="0 9 * * *")],
             selection_mode="random",
         )
-        config = AppConfig(
-            workspace_url="https://test.slack.com",
-            channels=[channel],
-        )
+        config = AppConfig(channels=[channel])
         config_file = tmp_path / "config.yaml"
         config_file.write_text("placeholder")
         args = make_args(
-            channel="C1", message=None, workspace=None,
+            channel="C1", message=None,
             jitter=0, selection_mode=None,
             env=tmp_path / "creds.env", config=config_file,
         )
@@ -256,22 +241,11 @@ class TestCmdStatus:
 
 class TestCmdValidate:
     def test_prints_valid_on_success(self, tmp_path, capsys):
-        config = AppConfig(workspace_url="https://test.slack.com", channels=[])
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text('workspace_url: "https://test.slack.com"\nchannels: []\n')
-        args = make_args(env=tmp_path / "creds.env", config=config_file)
+        args = make_args(env=tmp_path / "creds.env", config=tmp_path / "config.yaml")
         with patch(P_LOAD_CREDS, return_value=MagicMock()), \
-             patch(P_LOAD_CONFIG, return_value=config), \
              patch(P_VALIDATE):
             cmd_validate(args)
         assert "valid" in capsys.readouterr().out
-
-    def test_exits_without_workspace_url(self, tmp_path):
-        args = make_args(env=tmp_path / "creds.env", config=tmp_path / "nonexistent.yaml")
-        with patch(P_LOAD_CREDS, return_value=MagicMock()), \
-             pytest.raises(SystemExit) as exc_info:
-            cmd_validate(args)
-        assert exc_info.value.code == 1
 
 
 # ---------------------------------------------------------------------------
@@ -287,18 +261,13 @@ class TestMainIntegration:
         assert exc_info.value.code == 1
 
     def test_token_expired_exits_1(self, monkeypatch, tmp_path):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text('workspace_url: "https://t.com"\nchannels: []\n')
         monkeypatch.setattr(sys, "argv", [
             "slack-scheduler",
-            "--config", str(config_file),
             "--env", str(tmp_path / "creds.env"),
             "validate",
         ])
         with patch("slack_scheduler.cli.setup_logging"), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
-             patch(P_LOAD_CONFIG,
-                   return_value=AppConfig(workspace_url="https://t.com", channels=[])), \
              patch(P_VALIDATE, side_effect=TokenExpiredError("expired")), \
              pytest.raises(SystemExit) as exc_info:
             main()
@@ -306,7 +275,7 @@ class TestMainIntegration:
 
     def test_keyboard_interrupt_exits_0(self, monkeypatch, tmp_path):
         config_file = tmp_path / "config.yaml"
-        config_file.write_text('workspace_url: "https://t.com"\nchannels: []\n')
+        config_file.write_text('channels: []\n')
         monkeypatch.setattr(sys, "argv", [
             "slack-scheduler",
             "--config", str(config_file),
@@ -315,7 +284,7 @@ class TestMainIntegration:
         ])
         with patch("slack_scheduler.cli.setup_logging"), \
              patch(P_LOAD_CONFIG,
-                   return_value=AppConfig(workspace_url="https://t.com", channels=[])), \
+                   return_value=AppConfig(channels=[])), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \
              patch(P_VALIDATE), \
              patch(P_RUN_DAEMON, side_effect=KeyboardInterrupt), \
@@ -329,7 +298,6 @@ class TestMainIntegration:
             "--config", str(tmp_path / "config.yaml"),
             "--env", str(tmp_path / "creds.env"),
             "send", "--channel", "C1", "--message", "hi",
-            "--workspace", "https://test.slack.com",
         ])
         with patch("slack_scheduler.cli.setup_logging"), \
              patch(P_LOAD_CREDS, return_value=MagicMock()), \

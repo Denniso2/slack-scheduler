@@ -7,8 +7,6 @@ from slack_scheduler.auth import TokenExpiredError
 from slack_scheduler.sender import SendResult, SlackAPIError, _post, send_message
 from tests.conftest import make_rate_limited_response, make_slack_response
 
-WORKSPACE = "https://test.slack.com"
-
 
 # --- SlackAPIError -----------------------------------------------------------
 
@@ -31,7 +29,7 @@ def test_send_result_defaults():
 class TestDryRun:
     def test_returns_ok_without_posting(self, credentials_obj):
         with patch("slack_scheduler.sender.requests.post") as mock_post:
-            result = send_message("C1", "hello", credentials_obj, WORKSPACE, dry_run=True)
+            result = send_message("C1", "hello", credentials_obj, dry_run=True)
         mock_post.assert_not_called()
         assert result.ok is True
         assert result.channel_id == "C1"
@@ -44,14 +42,14 @@ class TestSuccess:
     def test_returns_ok_with_ts(self, credentials_obj):
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(True, {"ts": "123.456"})
-            result = send_message("C1", "hi", credentials_obj, WORKSPACE)
+            result = send_message("C1", "hi", credentials_obj)
         assert result.ok is True
         assert result.ts == "123.456"
 
     def test_single_attempt_on_first_success(self, credentials_obj):
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(True, {"ts": "1"})
-            send_message("C1", "hi", credentials_obj, WORKSPACE)
+            send_message("C1", "hi", credentials_obj)
         assert mock_post.call_count == 1
 
 
@@ -65,7 +63,7 @@ class TestRetry:
                 req_lib.ConnectionError("timeout"),
                 make_slack_response(True, {"ts": "1"}),
             ]
-            result = send_message("C1", "hi", credentials_obj, WORKSPACE, max_attempts=3)
+            result = send_message("C1", "hi", credentials_obj, max_attempts=3)
         assert result.ok is True
         assert mock_post.call_count == 2
 
@@ -74,7 +72,7 @@ class TestRetry:
              patch("slack_scheduler.sender.time.sleep"):
             mock_post.side_effect = req_lib.ConnectionError("down")
             with pytest.raises(req_lib.ConnectionError):
-                send_message("C1", "hi", credentials_obj, WORKSPACE, max_attempts=3)
+                send_message("C1", "hi", credentials_obj, max_attempts=3)
         assert mock_post.call_count == 3
 
     def test_exponential_backoff(self, credentials_obj):
@@ -82,7 +80,7 @@ class TestRetry:
              patch("slack_scheduler.sender.time.sleep") as mock_sleep:
             mock_post.side_effect = req_lib.ConnectionError("e")
             with pytest.raises(req_lib.ConnectionError):
-                send_message("C1", "hi", credentials_obj, WORKSPACE, max_attempts=3)
+                send_message("C1", "hi", credentials_obj, max_attempts=3)
         # backoff = 2**attempt where attempt is already incremented:
         # attempt=1 fail -> sleep(2**1=2), attempt=2 fail -> sleep(2**2=4), attempt=3 -> raise
         assert mock_sleep.call_args_list == [call(2), call(4)]
@@ -98,7 +96,7 @@ class TestRateLimit:
                 make_rate_limited_response(retry_after=1),
                 make_slack_response(True, {"ts": "1"}),
             ]
-            result = send_message("C1", "hi", credentials_obj, WORKSPACE,
+            result = send_message("C1", "hi", credentials_obj,
                                   max_rate_limit_retries=5)
         assert result.ok is True
 
@@ -109,7 +107,7 @@ class TestRateLimit:
                 make_rate_limited_response(retry_after=30),
                 make_slack_response(True, {"ts": "1"}),
             ]
-            send_message("C1", "hi", credentials_obj, WORKSPACE,
+            send_message("C1", "hi", credentials_obj,
                          max_rate_limit_retries=5)
         mock_sleep.assert_called_once_with(30)
 
@@ -117,7 +115,7 @@ class TestRateLimit:
         with patch("slack_scheduler.sender.requests.post") as mock_post, \
              patch("slack_scheduler.sender.time.sleep"):
             mock_post.return_value = make_rate_limited_response()
-            result = send_message("C1", "hi", credentials_obj, WORKSPACE,
+            result = send_message("C1", "hi", credentials_obj,
                                   max_rate_limit_retries=2)
         assert result.ok is False
         assert result.error_code == "ratelimited"
@@ -134,7 +132,7 @@ class TestRateLimit:
                 make_rate_limited_response(),
                 make_slack_response(True, {"ts": "ok"}),
             ]
-            result = send_message("C1", "hi", credentials_obj, WORKSPACE,
+            result = send_message("C1", "hi", credentials_obj,
                                   max_attempts=1, max_rate_limit_retries=5)
         assert result.ok is True
 
@@ -146,7 +144,7 @@ class TestAPIErrors:
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(False, {"error": "invalid_auth"})
             with pytest.raises(TokenExpiredError):
-                send_message("C1", "hi", credentials_obj, WORKSPACE)
+                send_message("C1", "hi", credentials_obj)
 
     @pytest.mark.parametrize("error_code", [
         "channel_not_found",
@@ -157,14 +155,14 @@ class TestAPIErrors:
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(False, {"error": error_code})
             with pytest.raises(SlackAPIError) as exc_info:
-                send_message("C1", "hi", credentials_obj, WORKSPACE)
+                send_message("C1", "hi", credentials_obj)
         assert exc_info.value.error_code == error_code
 
     def test_missing_error_key_defaults_to_unknown(self, credentials_obj):
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(False)
             with pytest.raises(SlackAPIError) as exc_info:
-                send_message("C1", "hi", credentials_obj, WORKSPACE)
+                send_message("C1", "hi", credentials_obj)
         assert exc_info.value.error_code == "unknown"
 
 
@@ -179,7 +177,7 @@ class TestJSONDecodeFailure:
         with patch("slack_scheduler.sender.requests.post", return_value=response), \
              patch("slack_scheduler.sender.time.sleep"):
             with pytest.raises(req_lib.HTTPError):
-                send_message("C1", "hi", credentials_obj, WORKSPACE, max_attempts=1)
+                send_message("C1", "hi", credentials_obj, max_attempts=1)
 
 
 # --- _post: payload shape ---------------------------------------------------
@@ -188,38 +186,31 @@ class TestPost:
     def test_url_construction(self, credentials_obj):
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(True)
-            _post("C1", "hi", credentials_obj, "https://test.slack.com")
-        assert mock_post.call_args[0][0] == "https://test.slack.com/api/chat.postMessage"
-
-    def test_strips_trailing_slash(self, credentials_obj):
-        with patch("slack_scheduler.sender.requests.post") as mock_post:
-            mock_post.return_value = make_slack_response(True)
-            _post("C1", "hi", credentials_obj, "https://test.slack.com/")
-        url = mock_post.call_args[0][0]
-        assert "//api" not in url
+            _post("C1", "hi", credentials_obj)
+        assert mock_post.call_args[0][0] == "https://slack.com/api/chat.postMessage"
 
     def test_sends_bearer_token(self, credentials_obj):
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(True)
-            _post("C1", "hi", credentials_obj, WORKSPACE)
+            _post("C1", "hi", credentials_obj)
         headers = mock_post.call_args.kwargs["headers"]
         assert headers["Authorization"] == f"Bearer {credentials_obj.xoxc_token}"
 
     def test_sends_d_cookie(self, credentials_obj):
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(True)
-            _post("C1", "hi", credentials_obj, WORKSPACE)
+            _post("C1", "hi", credentials_obj)
         assert mock_post.call_args.kwargs["cookies"]["d"] == credentials_obj.d_cookie
 
     def test_sends_channel_and_text_in_body(self, credentials_obj):
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(True)
-            _post("C1", "hello", credentials_obj, WORKSPACE)
+            _post("C1", "hello", credentials_obj)
         body = mock_post.call_args.kwargs["json"]
         assert body == {"channel": "C1", "text": "hello"}
 
     def test_uses_30s_timeout(self, credentials_obj):
         with patch("slack_scheduler.sender.requests.post") as mock_post:
             mock_post.return_value = make_slack_response(True)
-            _post("C1", "hi", credentials_obj, WORKSPACE)
+            _post("C1", "hi", credentials_obj)
         assert mock_post.call_args.kwargs["timeout"] == 30

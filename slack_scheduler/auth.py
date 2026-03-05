@@ -2,7 +2,7 @@ import logging
 
 import requests
 
-from slack_scheduler.config import Credentials
+from slack_scheduler.config import SLACK_API_BASE, Credentials
 
 log = logging.getLogger(__name__)
 
@@ -15,10 +15,10 @@ class TokenInvalidError(Exception):
     pass
 
 
-def validate_credentials(credentials: Credentials, workspace_url: str) -> None:
+def validate_credentials(credentials: Credentials) -> None:
     try:
         response = requests.post(
-            f"{workspace_url.rstrip('/')}/api/auth.test",
+            f"{SLACK_API_BASE}/auth.test",
             headers={"Authorization": f"Bearer {credentials.xoxc_token}"},
             cookies={"d": credentials.d_cookie},
             timeout=15,

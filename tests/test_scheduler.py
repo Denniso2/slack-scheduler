@@ -28,7 +28,7 @@ class TestRunDaemon:
                 ScheduleConfig(cron="0 14 * * 3"),
             ],
         )
-        config = AppConfig(workspace_url="https://test.slack.com", channels=[channel])
+        config = AppConfig(channels=[channel])
         with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
             instance = MockSched.return_value
             instance.get_jobs.return_value = [MagicMock(), MagicMock()]
@@ -36,7 +36,7 @@ class TestRunDaemon:
         assert instance.add_job.call_count == 2
 
     def test_no_schedules_does_not_start(self, credentials_obj):
-        config = AppConfig(workspace_url="https://test.slack.com", channels=[])
+        config = AppConfig(channels=[])
         with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
             instance = MockSched.return_value
             instance.get_jobs.return_value = []
@@ -55,7 +55,7 @@ class TestRunDaemon:
             id="C1", name="ch", messages=["hi"],
             schedules=[ScheduleConfig(cron="0 9 * * *", jitter_minutes=15)],
         )
-        config = AppConfig(workspace_url="https://test.slack.com", channels=[channel])
+        config = AppConfig(channels=[channel])
         with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
             instance = MockSched.return_value
             instance.get_jobs.return_value = [MagicMock()]
@@ -79,7 +79,7 @@ def _make_fire_kwargs(**overrides):
     base = dict(
         channel_id="C1", channel_name="general", messages=["hi"],
         selection_mode="random", skip_weekends=False, skip_dates=set(),
-        credentials=CREDS, workspace_url="https://test.slack.com", dry_run=False,
+        credentials=CREDS, dry_run=False,
     )
     base.update(overrides)
     return base
@@ -171,7 +171,7 @@ class TestFire:
 
 class TestPrintUpcoming:
     def test_empty_config_prints_no_schedules(self, capsys):
-        config = AppConfig(workspace_url="https://test.slack.com", channels=[])
+        config = AppConfig(channels=[])
         print_upcoming(config)
         assert "No schedules configured" in capsys.readouterr().out
 
@@ -192,7 +192,7 @@ class TestPrintUpcoming:
             id="C1", name="ch", messages=["hi"],
             schedules=[ScheduleConfig(cron="0 9 * * *", skip_weekends=True)],
         )
-        config = AppConfig(workspace_url="https://test.slack.com", channels=[channel])
+        config = AppConfig(channels=[channel])
         print_upcoming(config, count=7)
         out = capsys.readouterr().out
         date_strs = re.findall(r"\d{4}-\d{2}-\d{2}", out)
@@ -207,7 +207,6 @@ class TestPrintUpcoming:
         )
         skip_date = "2026-03-04"
         config = AppConfig(
-            workspace_url="https://test.slack.com",
             channels=[channel], skip_dates=[skip_date],
         )
         print_upcoming(config, count=10)
@@ -218,7 +217,7 @@ class TestPrintUpcoming:
             id="C1", name="ch", messages=["hi"],
             schedules=[ScheduleConfig(cron="0 9 * * *", jitter_minutes=10)],
         )
-        config = AppConfig(workspace_url="https://test.slack.com", channels=[channel])
+        config = AppConfig(channels=[channel])
         print_upcoming(config, count=1)
         assert "10min jitter" in capsys.readouterr().out
 

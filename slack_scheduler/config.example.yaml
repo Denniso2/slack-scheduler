@@ -1,5 +1,3 @@
-workspace_url: "https://your-company.slack.com"
-
 # Default selection mode for all channels unless overridden
 # Options: "random" | "cycle"
 default_selection_mode: "random"

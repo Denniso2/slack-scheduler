@@ -28,8 +28,7 @@ def run_daemon(
                 trigger=CronTrigger.from_crontab(schedule.cron),
                 jitter=schedule.jitter_minutes * 60 if schedule.jitter_minutes else None,
                 args=[channel.id, channel.name, channel.messages, channel.selection_mode,
-                      schedule.skip_weekends, skip_dates, credentials, config.workspace_url,
-                      dry_run],
+                      schedule.skip_weekends, skip_dates, credentials, dry_run],
                 id=f"{channel.id}_{i}",
                 name=f"{channel.name} ({schedule.cron})",
             )
@@ -56,7 +55,6 @@ def _fire(
     skip_weekends: bool,
     skip_dates: set[date],
     credentials: Credentials,
-    workspace_url: str,
     dry_run: bool,
 ) -> None:
     today = date.today()
@@ -76,7 +74,6 @@ def _fire(
         channel_id=channel_id,
         message=message,
         credentials=credentials,
-        workspace_url=workspace_url,
         dry_run=dry_run,
     )
 
