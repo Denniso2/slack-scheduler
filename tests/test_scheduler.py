@@ -69,6 +69,19 @@ class TestRunDaemon:
             run_daemon(app_config, credentials_obj)
         assert instance.add_job.call_args.kwargs["jitter"] is None
 
+    def test_skips_channels_with_no_messages(self, credentials_obj):
+        channel = ChannelConfig(
+            id="C1", name="empty", messages=[],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+        )
+        config = AppConfig(channels=[channel])
+        with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
+            instance = MockSched.return_value
+            instance.get_jobs.return_value = []
+            run_daemon(config, credentials_obj)
+        instance.add_job.assert_not_called()
+        instance.start.assert_not_called()
+
 
 # --- _fire: skip logic -------------------------------------------------------
 
@@ -165,6 +178,16 @@ class TestFire:
             mock_date.today.return_value = monday
             # Should not raise, just log
             _fire(**_make_fire_kwargs())
+
+    def test_skips_when_no_messages_configured(self):
+        monday = date(2026, 3, 2)
+        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+             patch("slack_scheduler.scheduler.send_message") as mock_send, \
+             patch("slack_scheduler.scheduler.pick_message") as mock_pick:
+            mock_date.today.return_value = monday
+            _fire(**_make_fire_kwargs(messages=[]))
+        mock_pick.assert_not_called()
+        mock_send.assert_not_called()
 
 
 # --- print_upcoming ----------------------------------------------------------

@@ -20,6 +20,12 @@ def run_daemon(
     scheduler = BlockingScheduler()
 
     for channel in config.channels:
+        if not channel.messages:
+            log.warning(
+                f"Skipping {channel.name}: no messages configured, so its schedules will not be registered."
+            )
+            continue
+
         skip_weekends = config.skip_weekends or channel.skip_weekends
         skip_dates = resolve_skip_dates(
             config.skip_dates, channel.skip_dates,
@@ -70,6 +76,10 @@ def _fire(
 
     if today in skip_dates:
         log.info(f"Skipping {channel_name}: {today} is in skip_dates")
+        return
+
+    if not messages:
+        log.error(f"Skipping {channel_name}: no messages configured")
         return
 
     message = pick_message(channel_name, messages, selection_mode)
