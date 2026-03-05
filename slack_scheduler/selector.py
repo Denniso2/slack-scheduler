@@ -11,25 +11,25 @@ log = logging.getLogger(__name__)
 
 
 def pick_message(
-    channel_id: str,
+    channel_key: str,
     messages: list[str],
     mode: str = "random",
     state_dir: Path | None = None,
 ) -> str:
     if not messages:
-        raise ValueError(f"No messages configured for channel {channel_id}")
+        raise ValueError(f"No messages configured for channel {channel_key}")
 
     if len(messages) == 1:
         return messages[0]
 
     if mode == "cycle":
-        return _pick_cycle(channel_id, messages, state_dir or paths.state_dir())
+        return _pick_cycle(channel_key, messages, state_dir or paths.state_dir())
     return random.choice(messages)
 
 
-def _pick_cycle(channel_id: str, messages: list[str], state_dir: Path) -> str:
+def _pick_cycle(channel_key: str, messages: list[str], state_dir: Path) -> str:
     state_dir.mkdir(parents=True, exist_ok=True)
-    state_file = state_dir / f"{channel_id}.json"
+    state_file = state_dir / f"{channel_key}.json"
 
     state = _load_state(state_file)
 

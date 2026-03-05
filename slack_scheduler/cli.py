@@ -205,7 +205,7 @@ def cmd_send(args):
         if channel_cfg and channel_cfg.messages:
             from slack_scheduler.selector import pick_message
             mode = args.selection_mode or channel_cfg.selection_mode
-            message = pick_message(args.channel, channel_cfg.messages, mode)
+            message = pick_message(channel_cfg.name, channel_cfg.messages, mode)
         else:
             log.error("No --message provided and no messages in config for this channel.")
             sys.exit(1)

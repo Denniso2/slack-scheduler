@@ -176,6 +176,15 @@ def load_config(config_path: Path) -> AppConfig:
             selection_mode=selection_mode,
         ))
 
+    seen_names: set[str] = set()
+    for ch in channels:
+        if ch.name in seen_names:
+            raise ValueError(
+                f"Duplicate channel name: {ch.name!r}. "
+                "Each channel entry must have a unique name."
+            )
+        seen_names.add(ch.name)
+
     return AppConfig(
         channels=channels,
         default_selection_mode=default_mode,

@@ -241,6 +241,38 @@ class TestLoadConfigValidation:
         with pytest.raises(ValueError, match="skip_dates"):
             load_config(p)
 
+    def test_duplicate_channel_name_raises(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                name: "standup"
+                messages: ["Hello!"]
+                schedules:
+                  - cron: "0 9 * * 1-5"
+              - id: "C222"
+                name: "standup"
+                messages: ["Goodbye!"]
+                schedules:
+                  - cron: "0 14 * * 3"
+        """)
+        with pytest.raises(ValueError, match="Duplicate channel name"):
+            load_config(p)
+
+    def test_duplicate_channel_name_from_id_default_raises(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: ["Hello!"]
+                schedules:
+                  - cron: "0 9 * * 1-5"
+              - id: "C111"
+                messages: ["Goodbye!"]
+                schedules:
+                  - cron: "0 14 * * 3"
+        """)
+        with pytest.raises(ValueError, match="Duplicate channel name"):
+            load_config(p)
+
 
 # --- dataclass default isolation --------------------------------------------
 

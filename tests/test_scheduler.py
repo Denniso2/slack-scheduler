@@ -48,7 +48,7 @@ class TestRunDaemon:
             instance = MockSched.return_value
             instance.get_jobs.return_value = [MagicMock()]
             run_daemon(app_config, credentials_obj)
-        assert instance.add_job.call_args.kwargs["id"] == "C111_0"
+        assert instance.add_job.call_args.kwargs["id"] == "general_0"
 
     def test_jitter_seconds_passed(self, credentials_obj):
         channel = ChannelConfig(

@@ -33,7 +33,7 @@ def run_daemon(
                 jitter=schedule.jitter_minutes * 60 if schedule.jitter_minutes else None,
                 args=[channel.id, channel.name, channel.messages, channel.selection_mode,
                       schedule.skip_weekends, skip_dates, credentials, dry_run],
-                id=f"{channel.id}_{i}",
+                id=f"{channel.name}_{i}",
                 name=f"{channel.name} ({schedule.cron})",
             )
             log.info(
@@ -71,7 +71,7 @@ def _fire(
         log.info(f"Skipping {channel_name}: {today} is in skip_dates")
         return
 
-    message = pick_message(channel_id, messages, selection_mode)
+    message = pick_message(channel_name, messages, selection_mode)
     message = render(message, datetime.now())
 
     result = send_message(
