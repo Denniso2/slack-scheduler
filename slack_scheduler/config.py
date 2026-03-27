@@ -70,6 +70,18 @@ def _validate_skip_dates(dates: list[str], context: str) -> list[str]:
     return dates
 
 
+def _validate_messages(messages: object, context: str) -> list[str]:
+    if not isinstance(messages, list):
+        raise ValueError(
+            f"Invalid messages in {context}: expected a list of strings"
+        )
+    if not all(isinstance(message, str) for message in messages):
+        raise ValueError(
+            f"Invalid messages in {context}: every message must be a string"
+        )
+    return messages
+
+
 def _parse_holidays_code(code: str) -> tuple[str, str | None]:
     if "-" in code:
         country, subdiv = code.split("-", 1)
@@ -118,6 +130,18 @@ def _validate_cron(cron: str, context: str) -> str:
     return cron
 
 
+def _validate_jitter_minutes(value: object, context: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(
+            f"Invalid jitter_minutes in {context}: expected a non-negative integer"
+        )
+    if value < 0:
+        raise ValueError(
+            f"Invalid jitter_minutes in {context}: expected a non-negative integer"
+        )
+    return value
+
+
 def load_config(config_path: Path) -> AppConfig:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
@@ -137,8 +161,16 @@ def load_config(config_path: Path) -> AppConfig:
         raw.get("skip_holidays"), "global skip_holidays"
     )
 
+    raw_channels = raw.get("channels", [])
+    if not isinstance(raw_channels, list):
+        raise ValueError("Invalid channels: expected a list")
+
     channels = []
-    for idx, ch in enumerate(raw.get("channels", [])):
+    for idx, ch in enumerate(raw_channels):
+        if not isinstance(ch, dict):
+            raise ValueError(
+                f"Channel at index {idx} must be a mapping"
+            )
         if "id" not in ch:
             raise ValueError(
                 f"Channel at index {idx} is missing required field 'id'"
@@ -156,8 +188,18 @@ def load_config(config_path: Path) -> AppConfig:
             f"channel '{channel_name}' skip_holidays",
         )
 
+        raw_schedules = ch.get("schedules", [])
+        if not isinstance(raw_schedules, list):
+            raise ValueError(
+                f"Channel '{channel_name}' schedules must be a list"
+            )
+
         schedules = []
-        for s_idx, s in enumerate(ch.get("schedules", [])):
+        for s_idx, s in enumerate(raw_schedules):
+            if not isinstance(s, dict):
+                raise ValueError(
+                    f"Channel '{channel_name}' schedule at index {s_idx} must be a mapping"
+                )
             if "cron" not in s:
                 raise ValueError(
                     f"Channel '{channel_name}' schedule at index {s_idx} is missing required field 'cron'"
@@ -167,10 +209,16 @@ def load_config(config_path: Path) -> AppConfig:
                     s["cron"],
                     f"channel '{channel_name}' schedule at index {s_idx}",
                 ),
-                jitter_minutes=s.get("jitter_minutes", 0),
+                jitter_minutes=_validate_jitter_minutes(
+                    s.get("jitter_minutes", 0),
+                    f"channel '{channel_name}' schedule at index {s_idx}",
+                ),
             ))
 
-        messages = ch.get("messages", [])
+        messages = _validate_messages(
+            ch.get("messages", []),
+            f"channel '{channel_name}'",
+        )
 
         if not schedules:
             log.warning(f"Channel {channel_name} ({channel_id}) has no schedules — it will never fire in daemon mode.")

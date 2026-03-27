@@ -238,6 +238,88 @@ class TestLoadConfigValidation:
         with pytest.raises(ValueError, match="Invalid cron"):
             load_config(p)
 
+    def test_channels_must_be_a_list(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels: {}
+        """)
+        with pytest.raises(ValueError, match="Invalid channels"):
+            load_config(p)
+
+    def test_channel_must_be_a_mapping(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - "not-a-channel"
+        """)
+        with pytest.raises(ValueError, match="must be a mapping"):
+            load_config(p)
+
+    def test_messages_must_be_a_list(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: "hi"
+                schedules:
+                  - cron: "0 9 * * *"
+        """)
+        with pytest.raises(ValueError, match="expected a list of strings"):
+            load_config(p)
+
+    def test_messages_must_contain_only_strings(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: ["hi", 123]
+                schedules:
+                  - cron: "0 9 * * *"
+        """)
+        with pytest.raises(ValueError, match="every message must be a string"):
+            load_config(p)
+
+    def test_schedules_must_be_a_list(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: ["hi"]
+                schedules: {}
+        """)
+        with pytest.raises(ValueError, match="schedules must be a list"):
+            load_config(p)
+
+    def test_schedule_must_be_a_mapping(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: ["hi"]
+                schedules:
+                  - "not-a-schedule"
+        """)
+        with pytest.raises(ValueError, match="schedule at index 0 must be a mapping"):
+            load_config(p)
+
+    def test_jitter_minutes_must_be_non_negative(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: ["hi"]
+                schedules:
+                  - cron: "0 9 * * *"
+                    jitter_minutes: -1
+        """)
+        with pytest.raises(ValueError, match="Invalid jitter_minutes"):
+            load_config(p)
+
+    def test_jitter_minutes_must_be_an_integer(self, tmp_path):
+        p = self._write(tmp_path, """\
+            channels:
+              - id: "C111"
+                messages: ["hi"]
+                schedules:
+                  - cron: "0 9 * * *"
+                    jitter_minutes: "5"
+        """)
+        with pytest.raises(ValueError, match="Invalid jitter_minutes"):
+            load_config(p)
+
     def test_invalid_channel_selection_mode_raises(self, tmp_path):
         p = self._write(tmp_path, """\
             channels:
