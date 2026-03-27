@@ -40,7 +40,8 @@ def run_daemon(
                 trigger=CronTrigger.from_crontab(schedule.cron),
                 jitter=schedule.jitter_minutes * 60 if schedule.jitter_minutes else None,
                 args=[channel.id, channel.name, channel.messages, channel.selection_mode,
-                      skip_weekends, skip_dates, credentials, dry_run, scheduler],
+                      skip_weekends, skip_dates, credentials, dry_run, scheduler,
+                      schedule.jitter_minutes or 0],
                 id=f"{channel.name}_{i}",
                 name=f"{channel.name} ({schedule.cron})",
             )
@@ -69,15 +70,20 @@ def _fire(
     credentials: Credentials,
     dry_run: bool,
     scheduler: BlockingScheduler | None = None,
+    jitter_minutes: int = 0,
 ) -> None:
-    today = date.today()
+    now = datetime.now()
+    possible_dates = {now.date()}
+    if jitter_minutes > 0:
+        earliest_nominal = now - timedelta(minutes=jitter_minutes)
+        possible_dates.add(earliest_nominal.date())
 
-    if skip_weekends and today.weekday() >= 5:
+    if skip_weekends and all(d.weekday() >= 5 for d in possible_dates):
         log.info(f"Skipping {channel_name}: weekend")
         return
 
-    if today in skip_dates:
-        log.info(f"Skipping {channel_name}: {today} is in skip_dates")
+    if possible_dates <= skip_dates:
+        log.info(f"Skipping {channel_name}: {now.date()} is in skip_dates")
         return
 
     if not messages:
@@ -85,7 +91,7 @@ def _fire(
         return
 
     message = pick_message(channel_name, messages, selection_mode)
-    message = render(message, datetime.now())
+    message = render(message, now)
 
     try:
         result = send_message(

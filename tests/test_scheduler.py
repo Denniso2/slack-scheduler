@@ -1,6 +1,6 @@
 """Tests for slack_scheduler.scheduler"""
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -83,6 +83,28 @@ class TestRunDaemon:
         instance.add_job.assert_not_called()
         instance.start.assert_not_called()
 
+    def test_jitter_minutes_passed_in_args(self, credentials_obj):
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *", jitter_minutes=15)],
+        )
+        config = AppConfig(channels=[channel])
+        with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
+            instance = MockSched.return_value
+            instance.get_jobs.return_value = [MagicMock()]
+            run_daemon(config, credentials_obj)
+        # jitter_minutes is the last positional arg
+        args = instance.add_job.call_args.kwargs["args"]
+        assert args[-1] == 15
+
+    def test_zero_jitter_minutes_passed_in_args(self, app_config, credentials_obj):
+        with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
+            instance = MockSched.return_value
+            instance.get_jobs.return_value = [MagicMock()]
+            run_daemon(app_config, credentials_obj)
+        args = instance.add_job.call_args.kwargs["args"]
+        assert args[-1] == 0
+
 
 # --- _fire: skip logic -------------------------------------------------------
 
@@ -99,154 +121,218 @@ def _make_fire_kwargs(**overrides):
     return base
 
 
+def _mock_now(dt):
+    """Return a patch context that makes datetime.now() return *dt*."""
+    return patch(
+        "slack_scheduler.scheduler.datetime",
+        wraps=datetime,
+        **{"now.return_value": dt},
+    )
+
+
 class TestFire:
     def test_sends_on_normal_weekday(self):
-        monday = date(2026, 3, 2)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        monday = datetime(2026, 3, 2, 9, 0)
+        with _mock_now(monday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    return_value=SendResult(ok=True, channel_id="C1", message="hi", ts="1")) as mock_send:
-            mock_date.today.return_value = monday
             _fire(**_make_fire_kwargs())
         mock_send.assert_called_once()
 
     def test_skips_saturday_when_skip_weekends(self):
-        saturday = date(2026, 3, 7)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        saturday = datetime(2026, 3, 7, 10, 0)
+        with _mock_now(saturday), \
              patch("slack_scheduler.scheduler.send_message") as mock_send:
-            mock_date.today.return_value = saturday
             _fire(**_make_fire_kwargs(skip_weekends=True))
         mock_send.assert_not_called()
 
     def test_skips_sunday_when_skip_weekends(self):
-        sunday = date(2026, 3, 8)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        sunday = datetime(2026, 3, 8, 10, 0)
+        with _mock_now(sunday), \
              patch("slack_scheduler.scheduler.send_message") as mock_send:
-            mock_date.today.return_value = sunday
             _fire(**_make_fire_kwargs(skip_weekends=True))
         mock_send.assert_not_called()
 
     def test_sends_on_weekend_when_skip_weekends_false(self):
-        saturday = date(2026, 3, 7)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        saturday = datetime(2026, 3, 7, 10, 0)
+        with _mock_now(saturday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    return_value=SendResult(ok=True, channel_id="C1", message="hi")) as mock_send:
-            mock_date.today.return_value = saturday
             _fire(**_make_fire_kwargs(skip_weekends=False))
         mock_send.assert_called_once()
 
     def test_skips_when_today_in_skip_dates(self):
-        today = date(2026, 12, 25)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        xmas = datetime(2026, 12, 25, 10, 0)
+        with _mock_now(xmas), \
              patch("slack_scheduler.scheduler.send_message") as mock_send:
-            mock_date.today.return_value = today
-            _fire(**_make_fire_kwargs(skip_dates={today}))
+            _fire(**_make_fire_kwargs(skip_dates={date(2026, 12, 25)}))
         mock_send.assert_not_called()
 
     def test_sends_when_today_not_in_skip_dates(self):
-        today = date(2026, 3, 3)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        tuesday = datetime(2026, 3, 3, 10, 0)
+        with _mock_now(tuesday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    return_value=SendResult(ok=True, channel_id="C1", message="hi")) as mock_send:
-            mock_date.today.return_value = today
             _fire(**_make_fire_kwargs(skip_dates={date(2026, 12, 25)}))
         mock_send.assert_called_once()
 
     def test_dry_run_forwarded_to_send_message(self):
-        monday = date(2026, 3, 2)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        monday = datetime(2026, 3, 2, 9, 0)
+        with _mock_now(monday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    return_value=SendResult(ok=True, channel_id="C1", message="hi")) as mock_send:
-            mock_date.today.return_value = monday
             _fire(**_make_fire_kwargs(dry_run=True))
         assert mock_send.call_args.kwargs["dry_run"] is True
 
     def test_logs_error_on_failed_send(self):
-        monday = date(2026, 3, 2)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        monday = datetime(2026, 3, 2, 9, 0)
+        with _mock_now(monday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    return_value=SendResult(ok=False, channel_id="C1", message="hi",
                                            error_code="channel_not_found")):
-            mock_date.today.return_value = monday
             # Should not raise, just log
             _fire(**_make_fire_kwargs())
 
     def test_skips_when_no_messages_configured(self):
-        monday = date(2026, 3, 2)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        monday = datetime(2026, 3, 2, 9, 0)
+        with _mock_now(monday), \
              patch("slack_scheduler.scheduler.send_message") as mock_send, \
              patch("slack_scheduler.scheduler.pick_message") as mock_pick:
-            mock_date.today.return_value = monday
             _fire(**_make_fire_kwargs(messages=[]))
         mock_pick.assert_not_called()
         mock_send.assert_not_called()
 
     def test_token_expired_shuts_down_scheduler(self):
-        monday = date(2026, 3, 2)
+        monday = datetime(2026, 3, 2, 9, 0)
         mock_scheduler = MagicMock()
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        with _mock_now(monday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    side_effect=TokenExpiredError("expired")):
-            mock_date.today.return_value = monday
             _fire(**_make_fire_kwargs(scheduler=mock_scheduler))
         mock_scheduler.shutdown.assert_called_once_with(wait=False)
 
     def test_token_expired_does_not_raise(self):
-        monday = date(2026, 3, 2)
+        monday = datetime(2026, 3, 2, 9, 0)
         mock_scheduler = MagicMock()
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        with _mock_now(monday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    side_effect=TokenExpiredError("expired")):
-            mock_date.today.return_value = monday
             # Should not raise
             _fire(**_make_fire_kwargs(scheduler=mock_scheduler))
 
     def test_token_expired_without_scheduler_does_not_raise(self):
-        monday = date(2026, 3, 2)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        monday = datetime(2026, 3, 2, 9, 0)
+        with _mock_now(monday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    side_effect=TokenExpiredError("expired")):
-            mock_date.today.return_value = monday
             # Should not raise even without scheduler
             _fire(**_make_fire_kwargs())
 
     def test_slack_api_error_does_not_raise(self):
-        monday = date(2026, 3, 2)
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        monday = datetime(2026, 3, 2, 9, 0)
+        with _mock_now(monday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    side_effect=SlackAPIError("some_error")):
-            mock_date.today.return_value = monday
             # Should not raise
             _fire(**_make_fire_kwargs())
 
     def test_slack_api_error_does_not_shut_down_scheduler(self):
-        monday = date(2026, 3, 2)
+        monday = datetime(2026, 3, 2, 9, 0)
         mock_scheduler = MagicMock()
-        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+        with _mock_now(monday), \
              patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
              patch("slack_scheduler.scheduler.render", return_value="hi"), \
              patch("slack_scheduler.scheduler.send_message",
                    side_effect=SlackAPIError("some_error")):
-            mock_date.today.return_value = monday
             _fire(**_make_fire_kwargs(scheduler=mock_scheduler))
         mock_scheduler.shutdown.assert_not_called()
+
+
+# --- _fire: jitter cross-midnight handling -----------------------------------
+
+class TestFireJitterCrossMidnight:
+    """Verify that jitter pushing execution across a day boundary does not
+    incorrectly trigger skip_weekends / skip_dates checks."""
+
+    def test_jitter_cross_midnight_friday_to_saturday_not_skipped(self):
+        """Friday 23:50 job with 15min jitter fires at Saturday 00:05.
+        skip_weekends is True but the intended date is Friday, so it must send."""
+        sat_00_05 = datetime(2026, 3, 7, 0, 5)  # Saturday 00:05
+        with _mock_now(sat_00_05), \
+             patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
+             patch("slack_scheduler.scheduler.render", return_value="hi"), \
+             patch("slack_scheduler.scheduler.send_message",
+                   return_value=SendResult(ok=True, channel_id="C1", message="hi", ts="1")) as mock_send:
+            _fire(**_make_fire_kwargs(skip_weekends=True, jitter_minutes=15))
+        mock_send.assert_called_once()
+
+    def test_genuine_saturday_with_jitter_still_skipped(self):
+        """Saturday 10:00 job with 15min jitter — 15 min before is still
+        Saturday, so skip_weekends correctly skips."""
+        sat_10_00 = datetime(2026, 3, 7, 10, 0)  # Saturday 10:00
+        with _mock_now(sat_10_00), \
+             patch("slack_scheduler.scheduler.send_message") as mock_send:
+            _fire(**_make_fire_kwargs(skip_weekends=True, jitter_minutes=15))
+        mock_send.assert_not_called()
+
+    def test_jitter_cross_midnight_into_skip_date_not_skipped(self):
+        """Job intended for March 2 (not a skip date) fires at March 3 00:05
+        (a skip date). Must still send because March 2 is valid."""
+        mar_3_00_05 = datetime(2026, 3, 3, 0, 5)  # March 3 00:05
+        skip = {date(2026, 3, 3)}
+        with _mock_now(mar_3_00_05), \
+             patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
+             patch("slack_scheduler.scheduler.render", return_value="hi"), \
+             patch("slack_scheduler.scheduler.send_message",
+                   return_value=SendResult(ok=True, channel_id="C1", message="hi", ts="1")) as mock_send:
+            _fire(**_make_fire_kwargs(skip_dates=skip, jitter_minutes=15))
+        mock_send.assert_called_once()
+
+    def test_zero_jitter_preserves_original_behavior(self):
+        """With jitter_minutes=0 on a Saturday, skip_weekends still works."""
+        sat_10_00 = datetime(2026, 3, 7, 10, 0)
+        with _mock_now(sat_10_00), \
+             patch("slack_scheduler.scheduler.send_message") as mock_send:
+            _fire(**_make_fire_kwargs(skip_weekends=True, jitter_minutes=0))
+        mock_send.assert_not_called()
+
+    def test_both_possible_dates_are_skip_dates(self):
+        """If both the current date and the date jitter_minutes ago are in
+        skip_dates, the message should be skipped."""
+        # March 4 00:05, jitter=15 -> possible_dates = {March 4, March 3}
+        mar_4_00_05 = datetime(2026, 3, 4, 0, 5)
+        skip = {date(2026, 3, 3), date(2026, 3, 4)}
+        with _mock_now(mar_4_00_05), \
+             patch("slack_scheduler.scheduler.send_message") as mock_send:
+            _fire(**_make_fire_kwargs(skip_dates=skip, jitter_minutes=15))
+        mock_send.assert_not_called()
+
+    def test_both_possible_dates_are_weekend_skipped(self):
+        """Sunday 00:05 with 15min jitter — Saturday 23:50 would also be
+        weekend, so both possible dates are weekends. Should skip."""
+        sun_00_05 = datetime(2026, 3, 8, 0, 5)  # Sunday 00:05
+        with _mock_now(sun_00_05), \
+             patch("slack_scheduler.scheduler.send_message") as mock_send:
+            _fire(**_make_fire_kwargs(skip_weekends=True, jitter_minutes=15))
+        mock_send.assert_not_called()
 
 
 # --- print_upcoming ----------------------------------------------------------
