@@ -151,6 +151,36 @@ class TestLoadConfigHappyPath:
         cfg = load_config(minimal_config_file)
         assert cfg.skip_weekends is False
 
+    def test_channel_skip_weekends_defaults_none_when_omitted(self, minimal_config_file):
+        cfg = load_config(minimal_config_file)
+        assert cfg.channels[0].skip_weekends is None
+
+    def test_channel_skip_weekends_false_when_explicit(self, tmp_path):
+        p = tmp_path / "config.yaml"
+        p.write_text(textwrap.dedent("""\
+            channels:
+              - id: "C111"
+                messages: ["hi"]
+                skip_weekends: false
+                schedules:
+                  - cron: "0 9 * * *"
+        """))
+        cfg = load_config(p)
+        assert cfg.channels[0].skip_weekends is False
+
+    def test_channel_skip_weekends_true_when_explicit(self, tmp_path):
+        p = tmp_path / "config.yaml"
+        p.write_text(textwrap.dedent("""\
+            channels:
+              - id: "C111"
+                messages: ["hi"]
+                skip_weekends: true
+                schedules:
+                  - cron: "0 9 * * *"
+        """))
+        cfg = load_config(p)
+        assert cfg.channels[0].skip_weekends is True
+
     def test_channel_name_defaults_to_id(self, tmp_path):
         p = tmp_path / "config.yaml"
         p.write_text(textwrap.dedent("""\

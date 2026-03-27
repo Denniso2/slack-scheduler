@@ -434,3 +434,99 @@ class TestRunDaemonHolidays:
         mock_resolve.assert_called_once_with(
             [], [], global_holidays="US", channel_holidays="NL",
         )
+
+
+# --- skip_weekends inheritance / override ------------------------------------
+
+class TestSkipWeekendsOverride:
+    """Verify that per-channel skip_weekends can override the global setting."""
+
+    def test_channel_none_inherits_global_true_in_run_daemon(self, credentials_obj):
+        """Channel with skip_weekends=None inherits global True."""
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+            skip_weekends=None,
+        )
+        config = AppConfig(channels=[channel], skip_weekends=True)
+        with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
+            instance = MockSched.return_value
+            instance.get_jobs.return_value = [MagicMock()]
+            run_daemon(config, credentials_obj)
+        # skip_weekends is the 5th positional arg (index 4) passed to _fire
+        args = instance.add_job.call_args.kwargs["args"]
+        assert args[4] is True
+
+    def test_channel_none_inherits_global_false_in_run_daemon(self, credentials_obj):
+        """Channel with skip_weekends=None inherits global False."""
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+            skip_weekends=None,
+        )
+        config = AppConfig(channels=[channel], skip_weekends=False)
+        with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
+            instance = MockSched.return_value
+            instance.get_jobs.return_value = [MagicMock()]
+            run_daemon(config, credentials_obj)
+        args = instance.add_job.call_args.kwargs["args"]
+        assert args[4] is False
+
+    def test_channel_false_overrides_global_true_in_run_daemon(self, credentials_obj):
+        """Channel with skip_weekends=False overrides global True."""
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+            skip_weekends=False,
+        )
+        config = AppConfig(channels=[channel], skip_weekends=True)
+        with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
+            instance = MockSched.return_value
+            instance.get_jobs.return_value = [MagicMock()]
+            run_daemon(config, credentials_obj)
+        args = instance.add_job.call_args.kwargs["args"]
+        assert args[4] is False
+
+    def test_channel_true_overrides_global_false_in_run_daemon(self, credentials_obj):
+        """Channel with skip_weekends=True overrides global False."""
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+            skip_weekends=True,
+        )
+        config = AppConfig(channels=[channel], skip_weekends=False)
+        with patch("slack_scheduler.scheduler.BlockingScheduler") as MockSched:
+            instance = MockSched.return_value
+            instance.get_jobs.return_value = [MagicMock()]
+            run_daemon(config, credentials_obj)
+        args = instance.add_job.call_args.kwargs["args"]
+        assert args[4] is True
+
+    def test_channel_false_overrides_global_true_in_print_upcoming(self, capsys):
+        """Channel with skip_weekends=False overrides global True — weekends appear."""
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+            skip_weekends=False,
+        )
+        config = AppConfig(channels=[channel], skip_weekends=True)
+        print_upcoming(config, count=14)
+        out = capsys.readouterr().out
+        date_strs = re.findall(r"\d{4}-\d{2}-\d{2}", out)
+        weekdays = {datetime.strptime(ds, "%Y-%m-%d").weekday() for ds in date_strs}
+        assert any(wd >= 5 for wd in weekdays), "Expected weekends when channel overrides global"
+
+    def test_channel_none_inherits_global_true_in_print_upcoming(self, capsys):
+        """Channel with skip_weekends=None inherits global True — no weekends."""
+        channel = ChannelConfig(
+            id="C1", name="ch", messages=["hi"],
+            schedules=[ScheduleConfig(cron="0 9 * * *")],
+            skip_weekends=None,
+        )
+        config = AppConfig(channels=[channel], skip_weekends=True)
+        print_upcoming(config, count=7)
+        out = capsys.readouterr().out
+        date_strs = re.findall(r"\d{4}-\d{2}-\d{2}", out)
+        for ds in date_strs:
+            dt = datetime.strptime(ds, "%Y-%m-%d")
+            assert dt.weekday() < 5, f"{ds} is a weekend day"

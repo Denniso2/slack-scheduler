@@ -27,7 +27,7 @@ def run_daemon(
             )
             continue
 
-        skip_weekends = config.skip_weekends or channel.skip_weekends
+        skip_weekends = channel.skip_weekends if channel.skip_weekends is not None else config.skip_weekends
         skip_dates = resolve_skip_dates(
             config.skip_dates, channel.skip_dates,
             global_holidays=config.skip_holidays,
@@ -126,7 +126,7 @@ def print_upcoming(config: AppConfig, count: int = 5) -> None:
     print(f"\nUpcoming scheduled messages (next {count} per schedule):\n")
 
     for channel in config.channels:
-        skip_weekends = config.skip_weekends or channel.skip_weekends
+        skip_weekends = channel.skip_weekends if channel.skip_weekends is not None else config.skip_weekends
         skip_dates = resolve_skip_dates(
             config.skip_dates, channel.skip_dates,
             global_holidays=config.skip_holidays,

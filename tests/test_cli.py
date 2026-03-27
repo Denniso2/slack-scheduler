@@ -418,6 +418,39 @@ class TestCmdTrigger:
         assert mock_send.call_args.kwargs["dry_run"] is True
         assert "Triggered standup" in capsys.readouterr().out
 
+    def test_respect_skips_channel_false_overrides_global_true(self, capsys):
+        """Channel skip_weekends=False overrides global True — sends on weekend."""
+        config = self._make_config(skip_weekends=False)
+        config.skip_weekends = True
+        mock_result = SendResult(ok=True, channel_id="C1", message="hi", ts="1")
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=True)
+        saturday = date(2026, 3, 7)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch("datetime.date", wraps=date) as mock_date, \
+             patch(P_PICK, return_value="hi"), \
+             patch(P_SEND, return_value=mock_result) as mock_send, \
+             patch(P_RENDER, side_effect=lambda m, *a: m):
+            mock_date.today.return_value = saturday
+            cmd_trigger(args)
+        mock_send.assert_called_once()
+
+    def test_respect_skips_channel_none_inherits_global_true(self):
+        """Channel skip_weekends=None inherits global True — skips on weekend."""
+        config = self._make_config()  # channel skip_weekends defaults to None
+        config.skip_weekends = True
+        args = make_args(name="standup", message=None, jitter=0, selection_mode=None, respect_skips=True)
+        saturday = date(2026, 3, 7)
+        with patch(P_LOAD_CONFIG, return_value=config), \
+             patch(P_LOAD_CREDS, return_value=MagicMock()), \
+             patch(P_VALIDATE), \
+             patch("datetime.date", wraps=date) as mock_date, \
+             patch(P_SEND) as mock_send:
+            mock_date.today.return_value = saturday
+            cmd_trigger(args)
+        mock_send.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # cmd_run

@@ -25,7 +25,7 @@ class ChannelConfig:
     messages: list[str]
     schedules: list[ScheduleConfig]
     selection_mode: str = "random"
-    skip_weekends: bool = False
+    skip_weekends: bool | None = None
     skip_dates: list[str] = field(default_factory=list)
     skip_holidays: str | None = None
 
@@ -178,7 +178,7 @@ def load_config(config_path: Path) -> AppConfig:
         channel_id = ch["id"]
         channel_name = ch.get("name", channel_id)
 
-        channel_skip_weekends = ch.get("skip_weekends", False)
+        channel_skip_weekends = ch.get("skip_weekends", None)
         channel_skip_dates = _validate_skip_dates(
             ch.get("skip_dates", []),
             f"channel '{channel_name}' skip_dates",
