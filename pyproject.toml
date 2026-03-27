@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slack-scheduler"
-version = "0.1.1"
+version = "0.2.0"
 description = "Automated Slack message scheduler with cron-based scheduling, message rotation, and jitter support"
 readme = "README.md"
 license = "MIT"
