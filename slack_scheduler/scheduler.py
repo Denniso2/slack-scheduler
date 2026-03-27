@@ -4,9 +4,10 @@ from datetime import date, datetime, timedelta
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from slack_scheduler.auth import TokenExpiredError
 from slack_scheduler.config import AppConfig, Credentials, resolve_skip_dates
 from slack_scheduler.selector import pick_message
-from slack_scheduler.sender import send_message
+from slack_scheduler.sender import SlackAPIError, send_message
 from slack_scheduler.templates import render
 
 log = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ def run_daemon(
                 trigger=CronTrigger.from_crontab(schedule.cron),
                 jitter=schedule.jitter_minutes * 60 if schedule.jitter_minutes else None,
                 args=[channel.id, channel.name, channel.messages, channel.selection_mode,
-                      skip_weekends, skip_dates, credentials, dry_run],
+                      skip_weekends, skip_dates, credentials, dry_run, scheduler],
                 id=f"{channel.name}_{i}",
                 name=f"{channel.name} ({schedule.cron})",
             )
@@ -67,6 +68,7 @@ def _fire(
     skip_dates: set[date],
     credentials: Credentials,
     dry_run: bool,
+    scheduler: BlockingScheduler | None = None,
 ) -> None:
     today = date.today()
 
@@ -85,12 +87,24 @@ def _fire(
     message = pick_message(channel_name, messages, selection_mode)
     message = render(message, datetime.now())
 
-    result = send_message(
-        channel_id=channel_id,
-        message=message,
-        credentials=credentials,
-        dry_run=dry_run,
-    )
+    try:
+        result = send_message(
+            channel_id=channel_id,
+            message=message,
+            credentials=credentials,
+            dry_run=dry_run,
+        )
+    except TokenExpiredError:
+        log.error(
+            "Token expired — shutting down scheduler. "
+            "Update credentials and restart."
+        )
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+        return
+    except SlackAPIError as exc:
+        log.error(f"Slack API error for {channel_name}: {exc}")
+        return
 
     if result.ok and not dry_run:
         log.info(f"Sent to {channel_name}: {message!r} (ts={result.ts})")

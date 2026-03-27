@@ -5,9 +5,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from slack_scheduler.auth import TokenExpiredError
 from slack_scheduler.config import AppConfig, ChannelConfig, ScheduleConfig
 from slack_scheduler.scheduler import _fire, print_upcoming, run_daemon
-from slack_scheduler.sender import SendResult
+from slack_scheduler.sender import SendResult, SlackAPIError
 
 
 # --- run_daemon: job registration -------------------------------------------
@@ -188,6 +189,64 @@ class TestFire:
             _fire(**_make_fire_kwargs(messages=[]))
         mock_pick.assert_not_called()
         mock_send.assert_not_called()
+
+    def test_token_expired_shuts_down_scheduler(self):
+        monday = date(2026, 3, 2)
+        mock_scheduler = MagicMock()
+        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+             patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
+             patch("slack_scheduler.scheduler.render", return_value="hi"), \
+             patch("slack_scheduler.scheduler.send_message",
+                   side_effect=TokenExpiredError("expired")):
+            mock_date.today.return_value = monday
+            _fire(**_make_fire_kwargs(scheduler=mock_scheduler))
+        mock_scheduler.shutdown.assert_called_once_with(wait=False)
+
+    def test_token_expired_does_not_raise(self):
+        monday = date(2026, 3, 2)
+        mock_scheduler = MagicMock()
+        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+             patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
+             patch("slack_scheduler.scheduler.render", return_value="hi"), \
+             patch("slack_scheduler.scheduler.send_message",
+                   side_effect=TokenExpiredError("expired")):
+            mock_date.today.return_value = monday
+            # Should not raise
+            _fire(**_make_fire_kwargs(scheduler=mock_scheduler))
+
+    def test_token_expired_without_scheduler_does_not_raise(self):
+        monday = date(2026, 3, 2)
+        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+             patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
+             patch("slack_scheduler.scheduler.render", return_value="hi"), \
+             patch("slack_scheduler.scheduler.send_message",
+                   side_effect=TokenExpiredError("expired")):
+            mock_date.today.return_value = monday
+            # Should not raise even without scheduler
+            _fire(**_make_fire_kwargs())
+
+    def test_slack_api_error_does_not_raise(self):
+        monday = date(2026, 3, 2)
+        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+             patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
+             patch("slack_scheduler.scheduler.render", return_value="hi"), \
+             patch("slack_scheduler.scheduler.send_message",
+                   side_effect=SlackAPIError("some_error")):
+            mock_date.today.return_value = monday
+            # Should not raise
+            _fire(**_make_fire_kwargs())
+
+    def test_slack_api_error_does_not_shut_down_scheduler(self):
+        monday = date(2026, 3, 2)
+        mock_scheduler = MagicMock()
+        with patch("slack_scheduler.scheduler.date", side_effect=date, today=MagicMock()) as mock_date, \
+             patch("slack_scheduler.scheduler.pick_message", return_value="hi"), \
+             patch("slack_scheduler.scheduler.render", return_value="hi"), \
+             patch("slack_scheduler.scheduler.send_message",
+                   side_effect=SlackAPIError("some_error")):
+            mock_date.today.return_value = monday
+            _fire(**_make_fire_kwargs(scheduler=mock_scheduler))
+        mock_scheduler.shutdown.assert_not_called()
 
 
 # --- print_upcoming ----------------------------------------------------------
